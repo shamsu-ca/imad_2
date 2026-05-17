@@ -48,7 +48,7 @@ export default function PhotoUpload({ adNo, initialUrl, onUploaded }) {
         title="Click to upload photo"
       >
         {url ? (
-          <img src={url} alt="Student photo" />
+          <img src={url} alt="Alumni photo" />
         ) : (
           <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">

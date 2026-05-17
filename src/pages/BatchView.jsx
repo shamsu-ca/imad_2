@@ -40,7 +40,7 @@ export default function BatchView({ data, onStudentSelect }) {
       <div style={{marginBottom:20}}>
         <div style={{fontSize:'0.67rem',fontWeight:700,letterSpacing:'0.1em',color:'var(--text3)',fontFamily:'var(--mono)',textTransform:'uppercase',marginBottom:4}}>Batch Coordinator</div>
         <h1 style={{fontSize:'1.7rem',marginBottom:4}}>Batch {batch}</h1>
-        <p style={{color:'var(--text2)',fontSize:'0.875rem'}}>{submitted.length} of {students.length} students have submitted</p>
+        <p style={{color:'var(--text2)',fontSize:'0.875rem'}}>{submitted.length} of {students.length} alumni have submitted</p>
       </div>
 
       {/* Stats */}
@@ -96,7 +96,7 @@ export default function BatchView({ data, onStudentSelect }) {
       {/* List */}
       <div className="card" style={{padding:0,overflow:'hidden',marginBottom:32}}>
         {filtered.length === 0 ? (
-          <div style={{padding:40,textAlign:'center',color:'var(--text3)',fontSize:'0.875rem'}}>No students match your filter.</div>
+          <div style={{padding:40,textAlign:'center',color:'var(--text3)',fontSize:'0.875rem'}}>No alumni match your filter.</div>
         ) : filtered.map((s,idx) => (
           <div
             key={s[adCol]}

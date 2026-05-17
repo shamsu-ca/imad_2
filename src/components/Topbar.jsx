@@ -53,7 +53,7 @@ export default function Topbar({ view, onHome, onBatch, onAdmin }) {
           </button>
           {view !== 'public' && (
             <span className="topbar-title">
-              {view === 'student' && 'Student Record'}
+              {view === 'student' && 'Alumni Record'}
               {view === 'batch'   && 'Batch View'}
               {view === 'admin'   && 'Admin Dashboard'}
             </span>

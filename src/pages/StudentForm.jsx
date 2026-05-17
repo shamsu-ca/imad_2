@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState } from 'react'
 import { api } from '../lib/api.js'
 import PhotoUpload from '../components/PhotoUpload.jsx'
 
@@ -26,23 +26,39 @@ const STEPS = [
   { id: 3, label: 'Employment' },
 ]
 
-function useSaveStatus() {
-  const [map, setMap] = useState({})
-  const timers = useRef({})
-  const mark = useCallback((field, status) => {
-    setMap(s => ({...s, [field]: status}))
-    if (status === 'saved' || status === 'error') {
-      clearTimeout(timers.current[field])
-      timers.current[field] = setTimeout(() => setMap(s => ({...s, [field]: 'idle'})), 2800)
-    }
-  }, [])
-  return [map, mark]
+// TF and SF are defined OUTSIDE the component so React never remounts them on re-render
+function TF({ vals, set, label, field, type='text', inputMode, hint }) {
+  const ro = isRO(field)
+  return (
+    <div className="field">
+      <label className="label">
+        <span className={ro ? 'label-ro' : ''}>{label}</span>
+      </label>
+      <input
+        className={`input ${ro ? 'ro' : ''}`}
+        type={type} inputMode={inputMode}
+        value={vals[field] ?? ''}
+        readOnly={ro}
+        onChange={ro ? undefined : e => set(field, e.target.value)}
+      />
+      {hint && <span style={{fontSize:'0.72rem',color:'var(--text3)'}}>{hint}</span>}
+    </div>
+  )
 }
 
-function Pill({ status }) {
-  if (!status || status === 'idle') return null
-  const labels = {saving:'saving…', saved:'✓ saved', error:'✗ error'}
-  return <span className={`save-pill ${status}`}>{labels[status]}</span>
+function SF({ vals, set, label, field, options }) {
+  return (
+    <div className="field">
+      <label className="label">{label}</label>
+      <select
+        className="select"
+        value={vals[field] || ''}
+        onChange={e => set(field, e.target.value)}
+      >
+        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </div>
+  )
 }
 
 function StepIndicator({ current, total }) {
@@ -50,8 +66,8 @@ function StepIndicator({ current, total }) {
     <div className="step-indicator">
       {Array.from({length: total}, (_, i) => {
         const n = i + 1
-        const done    = n < current
-        const active  = n === current
+        const done   = n < current
+        const active = n === current
         return (
           <div key={n} className="step-item">
             <div className={`step-dot ${active ? 'active' : done ? 'done' : ''}`}>
@@ -66,48 +82,19 @@ function StepIndicator({ current, total }) {
   )
 }
 
-// Compact read-only strip for pre-filled identity fields
-function PrefilledStrip({ vals, adField, nameField, batchField, yearField }) {
-  const items = [
-    { label: 'Ad No',  value: vals[adField]    || '—' },
-    { label: 'Name',   value: vals[nameField]   || '—' },
-    { label: 'Batch',  value: vals[batchField]  || '—' },
-    { label: 'Year',   value: vals[yearField]   || '—' },
-  ]
-  return (
-    <div style={{
-      background:'var(--bg2)', border:'1px dashed var(--border2)',
-      borderRadius:'var(--r-sm)', padding:'10px 14px',
-      marginBottom:16, display:'grid',
-      gridTemplateColumns:'repeat(auto-fill, minmax(100px, 1fr))', gap:'8px 12px',
-    }}>
-      <div style={{gridColumn:'1/-1',fontSize:'0.6rem',fontWeight:700,color:'var(--text3)',fontFamily:'var(--mono)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:2}}>
-        Pre-filled · read only
-      </div>
-      {items.map(it => (
-        <div key={it.label}>
-          <div style={{fontSize:'0.6rem',color:'var(--text3)',fontFamily:'var(--mono)',marginBottom:1}}>{it.label}</div>
-          <div style={{fontSize:'0.82rem',fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.value}</div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
 export default function StudentForm({ data, onBack }) {
   const { student: initial, headers } = data
-  const [vals,       setVals]     = useState(() => ({...initial}))
-  const [ssMap,      mark]        = useSaveStatus()
-  const [step,       setStep]     = useState(1)
-  const [saving,     setSaving]   = useState(false)
-  const [saveMsg,    setSaveMsg]  = useState(null)
-  const [submitted,  setSubmitted]= useState(!!initial._submitted)
-  const [done,       setDone]     = useState(false)
+  const [vals,      setVals]    = useState(() => ({...initial}))
+  const [step,      setStep]    = useState(1)
+  const [saving,    setSaving]  = useState(false)
+  const [saveMsg,   setSaveMsg] = useState(null)
+  const [submitted, setSubmitted] = useState(!!initial._submitted)
+  const [done,      setDone]    = useState(false)
 
   const h = (name) => {
     if (!headers) return name
     const lower = name.toLowerCase()
-    return headers.find(h => h.toLowerCase() === lower || h.toLowerCase().includes(lower)) || name
+    return headers.find(hh => hh.toLowerCase() === lower || hh.toLowerCase().includes(lower)) || name
   }
 
   const adField    = headers?.[0] || 'Ad No'
@@ -122,19 +109,15 @@ export default function StudentForm({ data, onBack }) {
   const lastField  = h('Last Attended')
   const qualField  = h('qualification')
 
-  const adNo     = vals[adField] || ''
+  const adNo    = vals[adField] || ''
   const dhStatus = vals[dhField] || ''
-  const empSt    = vals[h('Current Status')] || ''
-  const desig    = vals[h('Designation')] || ''
+  const empSt   = vals[h('Current Status')] || ''
+  const desig   = vals[h('Designation')] || ''
 
   const set = (field, val) => setVals(v => ({...v, [field]: val}))
 
-  const autoSave = async (field, value) => {
-    if (!adNo || isRO(field)) return
-    mark(field, 'saving')
-    try { await api.updateField(adNo, field, value); mark(field, 'saved') }
-    catch(e) { mark(field, 'error') }
-  }
+  // Shared props passed to TF / SF so they can read and write vals
+  const fp = { vals, set }
 
   const saveStep = async () => {
     setSaving(true); setSaveMsg(null)
@@ -161,44 +144,6 @@ export default function StudentForm({ data, onBack }) {
     } catch(e) {
       setSaveMsg({type:'error', text: e.message})
     } finally { setSaving(false) }
-  }
-
-  function TF({ label, field, type='text', inputMode, hint }) {
-    const ro = isRO(field)
-    const s  = ssMap[field]
-    return (
-      <div className="field">
-        <label className="label">
-          <span className={ro ? 'label-ro' : ''}>{label}</span>
-          <Pill status={s} />
-        </label>
-        <input
-          className={`input ${ro ? 'ro' : ''} ${s && s !== 'idle' ? s : ''}`}
-          type={type} inputMode={inputMode}
-          value={vals[field] ?? ''}
-          readOnly={ro}
-          onChange={ro ? undefined : e => set(field, e.target.value)}
-          onBlur={ro ? undefined : e => autoSave(field, e.target.value)}
-        />
-        {hint && <span style={{fontSize:'0.72rem',color:'var(--text3)'}}>{hint}</span>}
-      </div>
-    )
-  }
-
-  function SF({ label, field, options }) {
-    const s = ssMap[field]
-    return (
-      <div className="field">
-        <label className="label">{label} <Pill status={s} /></label>
-        <select
-          className={`select ${s && s !== 'idle' ? s : ''}`}
-          value={vals[field] || ''}
-          onChange={e => { set(field, e.target.value); autoSave(field, e.target.value) }}
-        >
-          {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-      </div>
-    )
   }
 
   // ── Done screen ──────────────────────────────────────────────
@@ -233,7 +178,7 @@ export default function StudentForm({ data, onBack }) {
           />
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontWeight:700,fontSize:'1.1rem',letterSpacing:'-0.02em',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-              {vals[nameField] || 'Student'}
+              {vals[nameField] || 'Alumni'}
             </div>
             <div style={{fontSize:'0.78rem',color:'var(--text2)',fontFamily:'var(--mono)',marginTop:2}}>
               #{vals[adField]} · Batch {vals[batchField]} · {vals[yearField]}
@@ -258,13 +203,12 @@ export default function StudentForm({ data, onBack }) {
             <span className="sec-label">Personal Information</span>
           </div>
           <div className="card" style={{marginBottom:16}}>
-            <PrefilledStrip vals={vals} adField={adField} nameField={nameField} batchField={batchField} yearField={yearField} />
             <div style={{display:'flex',flexDirection:'column',gap:14}}>
-              <TF label="Phone Number" field={phoneField} type="tel" inputMode="tel"
+              <TF {...fp} label="Phone Number" field={phoneField} type="tel" inputMode="tel"
                 hint="Your current active phone number" />
-              <TF label="Email Address" field={emailField} type="email" />
-              <TF label="Address" field={addrField} hint="House / Street / Area" />
-              <TF label="Post Office" field={poField} />
+              <TF {...fp} label="Email Address" field={emailField} type="email" />
+              <TF {...fp} label="Address" field={addrField} hint="House / Street / Area" />
+              <TF {...fp} label="Post Office" field={poField} />
             </div>
           </div>
         </div>
@@ -278,16 +222,15 @@ export default function StudentForm({ data, onBack }) {
             <span className="sec-label">Academic Details</span>
           </div>
           <div className="card" style={{marginBottom:16}}>
-            <PrefilledStrip vals={vals} adField={adField} nameField={nameField} batchField={batchField} yearField={yearField} />
             <div style={{display:'flex',flexDirection:'column',gap:14}}>
-              <SF label="DH Status" field={dhField} options={DH_OPTS} />
+              <SF {...fp} label="DH Status" field={dhField} options={DH_OPTS} />
               {dhStatus === 'Not completed UG' && (
                 <div className="field fade">
-                  <label className="label">Last Attended Class <Pill status={ssMap[lastField]} /></label>
+                  <label className="label">Last Attended Class</label>
                   <select
-                    className={`select ${ssMap[lastField] && ssMap[lastField] !== 'idle' ? ssMap[lastField] : ''}`}
+                    className="select"
                     value={vals[lastField] || ''}
-                    onChange={e => { set(lastField, e.target.value); autoSave(lastField, e.target.value) }}
+                    onChange={e => set(lastField, e.target.value)}
                   >
                     <option value="">Select class…</option>
                     {Array.from({length:10}, (_, i) => i + 1).map(n => (
@@ -296,7 +239,7 @@ export default function StudentForm({ data, onBack }) {
                   </select>
                 </div>
               )}
-              <TF label="Educational Qualification" field={qualField}
+              <TF {...fp} label="Educational Qualification" field={qualField}
                 hint="e.g. B.A. Arabic, B.Tech" />
             </div>
           </div>
@@ -311,7 +254,6 @@ export default function StudentForm({ data, onBack }) {
             <span className="sec-label">Employment Details</span>
           </div>
           <div className="card" style={{marginBottom:16}}>
-            <PrefilledStrip vals={vals} adField={adField} nameField={nameField} batchField={batchField} yearField={yearField} />
             <div style={{display:'flex',flexDirection:'column',gap:14}}>
               <div className="field">
                 <label className="label">Current Status</label>
@@ -320,7 +262,7 @@ export default function StudentForm({ data, onBack }) {
                     <button
                       key={opt.value} type="button"
                       className={`status-pill ${empSt === opt.value ? 'active' : ''}`}
-                      onClick={() => { set(h('Current Status'), opt.value); autoSave(h('Current Status'), opt.value) }}
+                      onClick={() => set(h('Current Status'), opt.value)}
                     >
                       <div style={{fontSize:'1.1rem',marginBottom:2}}>{opt.emoji}</div>
                       <div style={{fontSize:'0.8rem',fontWeight:600}}>{opt.label}</div>
@@ -331,34 +273,34 @@ export default function StudentForm({ data, onBack }) {
 
               {empSt === 'Self-employed' && (
                 <div className="fade" style={{display:'flex',flexDirection:'column',gap:14,borderTop:'1px solid var(--border)',paddingTop:14}}>
-                  <TF label="Business Name"      field={h('Business Name')} />
-                  <TF label="Nature of Business" field={h('Nature of Business')} hint="e.g. Retail, Education, IT" />
+                  <TF {...fp} label="Business Name"      field={h('Business Name')} />
+                  <TF {...fp} label="Nature of Business" field={h('Nature of Business')} hint="e.g. Retail, Education, IT" />
                   <div className="g2">
-                    <TF label="Year Started"      field={h('Year Started')} type="number" inputMode="numeric" hint="e.g. 2018" />
-                    <TF label="Business Location" field={h('Business Location')} hint="City" />
+                    <TF {...fp} label="Year Started"      field={h('Year Started')} type="number" inputMode="numeric" hint="e.g. 2018" />
+                    <TF {...fp} label="Business Location" field={h('Business Location')} hint="City" />
                   </div>
                 </div>
               )}
 
               {empSt === 'Employed' && (
                 <div className="fade" style={{display:'flex',flexDirection:'column',gap:14,borderTop:'1px solid var(--border)',paddingTop:14}}>
-                  <SF label="Designation" field={h('Designation')} options={[
+                  <SF {...fp} label="Designation" field={h('Designation')} options={[
                     {value:'', label:'Select designation…'},
                     ...DESIGNATIONS.map(d => ({value:d, label:d}))
                   ]} />
                   {desig === 'Other' && (
-                    <TF label="Custom Designation" field={h('Custom Designation')} hint="Enter your designation" />
+                    <TF {...fp} label="Custom Designation" field={h('Custom Designation')} hint="Enter your designation" />
                   )}
-                  <TF label="Organisation Name" field={h('Organisation Name')} />
-                  <TF label="Work Location"     field={h('Work Location')} hint="City / District" />
+                  <TF {...fp} label="Organisation Name" field={h('Organisation Name')} />
+                  <TF {...fp} label="Work Location"     field={h('Work Location')} hint="City / District" />
                 </div>
               )}
 
               {empSt === 'Higher Studies' && (
                 <div className="fade" style={{display:'flex',flexDirection:'column',gap:14,borderTop:'1px solid var(--border)',paddingTop:14}}>
-                  <TF label="Course"               field={h('Course')}      hint="e.g. M.A. Arabic, MBA" />
-                  <TF label="University / Institution" field={h('University')} />
-                  <TF label="Year of Completion"   field={h('Year of Completion')} type="number" inputMode="numeric" hint="e.g. 2026" />
+                  <TF {...fp} label="Course"                    field={h('Course')}      hint="e.g. M.A. Arabic, MBA" />
+                  <TF {...fp} label="University / Institution"  field={h('University')} />
+                  <TF {...fp} label="Year of Completion"        field={h('Year of Completion')} type="number" inputMode="numeric" hint="e.g. 2026" />
                 </div>
               )}
             </div>

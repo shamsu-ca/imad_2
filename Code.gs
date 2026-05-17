@@ -51,8 +51,16 @@ function route(action, qp, body) {
   } catch(e) { console.error(e); return err(e.message); }
 }
 
-function getSheet()      { return SpreadsheetApp.openById(SHEET_ID).getSheetByName(BASE_TAB); }
-function getCodesSheet() { return SpreadsheetApp.openById(SHEET_ID).getSheetByName(CODES_TAB); }
+function getSheet() { return SpreadsheetApp.openById(SHEET_ID).getSheetByName(BASE_TAB); }
+function getCodesSheet() {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  let sh = ss.getSheetByName(CODES_TAB);
+  if (!sh) {
+    sh = ss.insertSheet(CODES_TAB);
+    sh.getRange(1, 1, 1, 2).setValues([['Batch', 'Code']]);
+  }
+  return sh;
+}
 
 function getAllData() {
   const sh = getSheet();
@@ -81,12 +89,11 @@ function getSubmittedColIndex(headers) {
 }
 
 // Determines whether a row counts as submitted.
-// Uses "Submitted At" column if present; falls back to phone number for legacy data.
+// Only counts rows that have an explicit "Submitted At" timestamp.
 function isSubmitted(row, headers) {
   const subCol = getSubmittedColIndex(headers);
-  if (subCol >= 0) return !!String(row[subCol] || '').trim();
-  const phoneCol = getColIndex(headers, 'phone');
-  return phoneCol >= 0 && !!String(row[phoneCol] || '').trim();
+  if (subCol < 0) return false;
+  return !!String(row[subCol] || '').trim();
 }
 
 function getStudent(adNo) {

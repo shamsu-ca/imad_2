@@ -80,7 +80,7 @@ function EditPopup({ student, headers, onSave, onClose }) {
         <div className="drag-handle"/>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
           <div>
-            <h2 style={{fontSize:'1rem'}}>Edit Student</h2>
+            <h2 style={{fontSize:'1rem'}}>Edit Alumni</h2>
             <div style={{fontSize:'0.78rem',color:'var(--text2)',fontFamily:'var(--mono)'}}>#{vals[adCol]} · {vals[headers[1]]}</div>
           </div>
           <button className="btn btn-ghost" onClick={onClose} style={{height:32,padding:'0 8px'}}>✕</button>
