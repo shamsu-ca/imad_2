@@ -97,17 +97,18 @@ export default function StudentForm({ data, onBack }) {
     return headers.find(hh => hh.toLowerCase() === lower || hh.toLowerCase().includes(lower)) || name
   }
 
-  const adField    = headers?.[0] || 'Ad No'
-  const nameField  = h('name')
-  const yearField  = h('year')
-  const batchField = h('batch')
-  const phoneField = h('phone')
-  const emailField = h('email')
-  const addrField  = h('address')
-  const poField    = h('post')
-  const dhField    = h('DH Status')
-  const lastField  = h('Last Attended')
-  const qualField  = h('qualification')
+  const adField       = headers?.[0] || 'Ad No'
+  const nameField     = h('name')
+  const yearField     = h('year')
+  const batchField    = h('batch')
+  const phoneField    = h('phone')
+  const whatsappField = headers?.find(hh => hh.toLowerCase().replace(/\s/g,'').includes('whatsapp')) || 'Whatsapp Number'
+  const emailField    = h('email')
+  const addrField     = h('address')
+  const poField       = h('post')
+  const dhField       = h('DH Status')
+  const lastField     = h('Last Attended')
+  const qualField     = h('qualification')
 
   const adNo    = vals[adField] || ''
   const dhStatus = vals[dhField] || ''
@@ -119,12 +120,48 @@ export default function StudentForm({ data, onBack }) {
   // Shared props passed to TF / SF so they can read and write vals
   const fp = { vals, set }
 
+  const SELF_EMP_FIELDS  = ['Business Name', 'Nature of Business', 'Year Started', 'Business Location']
+  const EMPLOYED_FIELDS  = ['Designation', 'Custom Designation', 'Organisation Name', 'Work Location']
+  const HIGHER_FIELDS    = ['Course', 'University', 'Year of Completion']
+  const ALL_EMP_FIELDS   = [...SELF_EMP_FIELDS, ...EMPLOYED_FIELDS, ...HIGHER_FIELDS]
+
+  function buildEditable() {
+    const editable = {}
+    Object.entries(vals).forEach(([k,v]) => { if(!isRO(k) && !k.startsWith('_')) editable[k] = v })
+    // Clear employment fields that don't belong to the current status
+    const status = vals[h('Current Status')] || ''
+    const keep = status === 'Self-employed' ? SELF_EMP_FIELDS
+      : status === 'Employed' ? EMPLOYED_FIELDS
+      : status === 'Higher Studies' ? HIGHER_FIELDS
+      : []
+    ALL_EMP_FIELDS.forEach(f => {
+      const field = h(f)
+      if (!keep.includes(f)) editable[field] = ''
+    })
+    // If Employed but Designation !== Other, clear Custom Designation
+    if (status === 'Employed' && vals[h('Designation')] !== 'Other') {
+      editable[h('Custom Designation')] = ''
+    }
+    return editable
+  }
+
+  function validateStep1() {
+    if (!vals[phoneField]?.trim()) {
+      setSaveMsg({type:'error', text:'Phone Number is required.'})
+      return false
+    }
+    if (!vals[whatsappField]?.trim()) {
+      setSaveMsg({type:'error', text:'WhatsApp Number is required.'})
+      return false
+    }
+    return true
+  }
+
   const saveStep = async () => {
+    if (step === 1 && !validateStep1()) return
     setSaving(true); setSaveMsg(null)
     try {
-      const editable = {}
-      Object.entries(vals).forEach(([k,v]) => { if(!isRO(k) && !k.startsWith('_')) editable[k] = v })
-      await api.updateRow(adNo, editable)
+      await api.updateRow(adNo, buildEditable())
       setSaveMsg({type:'success', text:'Saved ✓'})
       setTimeout(() => { setSaveMsg(null); setStep(s => s + 1) }, 700)
     } catch(e) {
@@ -135,9 +172,7 @@ export default function StudentForm({ data, onBack }) {
   const finishAndSubmit = async () => {
     setSaving(true); setSaveMsg(null)
     try {
-      const editable = {}
-      Object.entries(vals).forEach(([k,v]) => { if(!isRO(k) && !k.startsWith('_')) editable[k] = v })
-      await api.updateRow(adNo, editable)
+      await api.updateRow(adNo, buildEditable())
       await api.markSubmitted(adNo)
       setSubmitted(true)
       setDone(true)
@@ -204,8 +239,10 @@ export default function StudentForm({ data, onBack }) {
           </div>
           <div className="card" style={{marginBottom:16}}>
             <div style={{display:'flex',flexDirection:'column',gap:14}}>
-              <TF {...fp} label="Phone Number" field={phoneField} type="tel" inputMode="tel"
+              <TF {...fp} label="Phone Number *" field={phoneField} type="tel" inputMode="tel"
                 hint="Your current active phone number" />
+              <TF {...fp} label="WhatsApp Number *" field={whatsappField} type="tel" inputMode="tel"
+                hint="WhatsApp number (can be same as phone)" />
               <TF {...fp} label="Email Address" field={emailField} type="email" />
               <TF {...fp} label="Address" field={addrField} hint="House / Street / Area" />
               <TF {...fp} label="Post Office" field={poField} />

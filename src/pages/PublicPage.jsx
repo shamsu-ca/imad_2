@@ -57,10 +57,12 @@ function RadarChart({ batches, onClick, open }) {
             fontSize="9" fill="var(--text3)" fontFamily="var(--mono)">B{b.batch}</text>
         })}
         {/* Centre summary */}
-        <text x={cx} y={cy - 6} textAnchor="middle" fontSize="18" fontWeight="700"
+        <text x={cx} y={cy - 14} textAnchor="middle" fontSize="16" fontWeight="700"
           fill="var(--text)" fontFamily="var(--font)">{pct}%</text>
-        <text x={cx} y={cy + 12} textAnchor="middle" fontSize="9" fill="var(--text3)"
-          fontFamily="var(--font)">overall</text>
+        <text x={cx} y={cy + 4} textAnchor="middle" fontSize="9" fill="var(--text3)"
+          fontFamily="var(--font)">submitted</text>
+        <text x={cx} y={cy + 17} textAnchor="middle" fontSize="9" fill="var(--text3)"
+          fontFamily="var(--mono)">{submitted}/{total}</text>
       </svg>
 
       {/* Legend + tap hint */}
@@ -101,7 +103,7 @@ function BatchMiniCard({ batch, submitted, total }) {
 }
 
 function getMaxBatch() {
-  return parseInt(localStorage.getItem('imad_max_batch') || '0') || 0
+  return parseInt(localStorage.getItem('imad_max_batch') || '18') || 18
 }
 
 export default function PublicPage({ onStudentFound }) {

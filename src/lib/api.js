@@ -1,5 +1,7 @@
-const BASE = import.meta.env.VITE_APPS_SCRIPT_URL ||
-  "https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec";
+const BASE = (import.meta.env.VITE_APPS_SCRIPT_URL &&
+  import.meta.env.VITE_APPS_SCRIPT_URL !== "undefined")
+  ? import.meta.env.VITE_APPS_SCRIPT_URL
+  : "https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec";
 
 async function get(action, params = {}) {
   const url = new URL(BASE);

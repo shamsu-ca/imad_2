@@ -128,12 +128,18 @@ function BatchSettings({ batches }) {
   const maxAvailable = batches.length > 0
     ? Math.max(...batches.map(b => parseInt(b.batch) || 0))
     : 18
-  const stored = parseInt(localStorage.getItem('imad_max_batch') || '0') || maxAvailable
+  const stored = parseInt(localStorage.getItem('imad_max_batch') || '18') || maxAvailable
   const [val, setVal] = useState(stored)
   const [saved, setSaved] = useState(false)
 
-  const selected = batches.filter(b => (parseInt(b.batch) || 0) <= val)
-  const totalStudents = selected.reduce((a,b) => a + b.total, 0)
+  const allStudents   = batches.reduce((a,b) => a + b.total, 0)
+  const selected      = batches.filter(b => (parseInt(b.batch) || 0) <= val)
+  const rangeStudents = selected.reduce((a,b) => a + b.total, 0)
+  const rangePct      = allStudents ? Math.round(rangeStudents / allStudents * 100) : 100
+
+  const allSubmitted   = batches.reduce((a,b) => a + b.submitted, 0)
+  const rangeSubmitted = selected.reduce((a,b) => a + b.submitted, 0)
+  const submitPct      = rangeStudents ? Math.round(rangeSubmitted / rangeStudents * 100) : 0
 
   function save() {
     localStorage.setItem('imad_max_batch', String(val))
@@ -152,7 +158,7 @@ function BatchSettings({ batches }) {
           Set how many batches are visible on the public page and batch selector. Batches above this number will be hidden from students and coordinators.
         </p>
         <div className="field" style={{marginBottom:16}}>
-          <label className="label">Show batches 1 to</label>
+          <label className="label">Show batches 1 to {val} · {rangeStudents} students ({rangePct}% of total)</label>
           <div style={{display:'flex',alignItems:'center',gap:12}}>
             <input
               type="range" min={1} max={maxAvailable}
@@ -171,14 +177,18 @@ function BatchSettings({ batches }) {
           </div>
         </div>
         <div className="card card-sm" style={{background:'var(--bg2)',marginBottom:16}}>
-          <div style={{display:'flex',gap:24,alignItems:'center'}}>
-            <div>
-              <div style={{fontSize:'0.67rem',fontWeight:700,color:'var(--text3)',fontFamily:'var(--mono)',textTransform:'uppercase',letterSpacing:'0.06em'}}>Selected batches</div>
-              <div style={{fontSize:'1.4rem',fontWeight:700,letterSpacing:'-0.03em'}}>{selected.length}</div>
-            </div>
+          <div style={{display:'flex',gap:24,alignItems:'center',flexWrap:'wrap'}}>
             <div>
               <div style={{fontSize:'0.67rem',fontWeight:700,color:'var(--text3)',fontFamily:'var(--mono)',textTransform:'uppercase',letterSpacing:'0.06em'}}>Total students</div>
-              <div style={{fontSize:'1.4rem',fontWeight:700,letterSpacing:'-0.03em'}}>{totalStudents}</div>
+              <div style={{fontSize:'1.4rem',fontWeight:700,letterSpacing:'-0.03em'}}>{rangeStudents}</div>
+            </div>
+            <div>
+              <div style={{fontSize:'0.67rem',fontWeight:700,color:'var(--text3)',fontFamily:'var(--mono)',textTransform:'uppercase',letterSpacing:'0.06em'}}>% of all students</div>
+              <div style={{fontSize:'1.4rem',fontWeight:700,letterSpacing:'-0.03em',color:'var(--accent)'}}>{rangePct}%</div>
+            </div>
+            <div>
+              <div style={{fontSize:'0.67rem',fontWeight:700,color:'var(--text3)',fontFamily:'var(--mono)',textTransform:'uppercase',letterSpacing:'0.06em'}}>Submitted</div>
+              <div style={{fontSize:'1.4rem',fontWeight:700,letterSpacing:'-0.03em',color:'var(--green)'}}>{rangeSubmitted} <span style={{fontSize:'0.85rem',fontWeight:500,color:'var(--text3)'}}>({submitPct}%)</span></div>
             </div>
           </div>
         </div>

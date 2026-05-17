@@ -56,8 +56,13 @@ function getCodesSheet() {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   let sh = ss.getSheetByName(CODES_TAB);
   if (!sh) {
+    // case-insensitive fallback (sheet might be named "Codes" or "CODES")
+    const all = ss.getSheets();
+    sh = all.find(s => s.getName().toLowerCase() === CODES_TAB.toLowerCase()) || null;
+  }
+  if (!sh) {
     sh = ss.insertSheet(CODES_TAB);
-    sh.getRange(1, 1, 1, 2).setValues([['Batch', 'Code']]);
+    sh.getRange(1, 1, 1, 2).setValues([['BatchNo', 'Code']]);
   }
   return sh;
 }
@@ -304,9 +309,13 @@ function getPhotoUrl(adNo) {
 
 function uploadPhoto(adNo, imageData, mimeType) {
   if (!adNo || !imageData) throw new Error("adNo and imageData required");
-  const folder = getOrCreateFolder();
+  let folder;
+  try { folder = getOrCreateFolder(); }
+  catch(e) { throw new Error("Cannot access photo folder: " + e.message); }
   const old = folder.getFilesByName("photo_" + String(adNo).trim());
-  while (old.hasNext()) old.next().setTrashed(true);
+  while (old.hasNext()) {
+    try { old.next().setTrashed(true); } catch(_) { /* skip files we can't trash (owned by other account) */ }
+  }
   const blob = Utilities.newBlob(Utilities.base64Decode(imageData), mimeType || "image/jpeg", "photo_" + String(adNo).trim());
   const file = folder.createFile(blob);
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
