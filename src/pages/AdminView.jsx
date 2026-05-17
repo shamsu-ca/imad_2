@@ -1,6 +1,59 @@
 import { useState, useEffect, useMemo } from 'react'
 import { api } from '../lib/api.js'
 
+// Radial fan gauge (shared with PublicPage)
+function RadialGauge({ submitted, total }) {
+  const [open, setOpen] = useState(false)
+  const pct   = total ? submitted / total : 0
+  const pctN  = Math.round(pct * 100)
+  const r     = 54, cx = 80, cy = 80
+  const C     = 2 * Math.PI * r
+  const arc   = 0.75 * C
+  const filled = pct * arc
+  const color  = pct >= 0.8 ? 'var(--green)' : pct >= 0.5 ? 'var(--amber)' : 'var(--red)'
+
+  return (
+    <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}>
+      <div
+        onClick={() => setOpen(o => !o)}
+        style={{cursor:'pointer',userSelect:'none'}}
+      >
+        <svg width="160" height="140" viewBox="0 0 160 140">
+          <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--bg2)" strokeWidth={13}
+            strokeDasharray={`${arc} ${C - arc}`} strokeLinecap="round"
+            transform={`rotate(135 ${cx} ${cy})`} />
+          <circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth={13}
+            strokeDasharray={`${filled} ${C - filled}`} strokeLinecap="round"
+            transform={`rotate(135 ${cx} ${cy})`}
+            style={{transition:'stroke-dasharray 0.8s cubic-bezier(.4,0,.2,1)'}} />
+          <text x={cx} y={cy - 6} textAnchor="middle" fontSize="22" fontWeight="700"
+            fill="var(--text)" fontFamily="var(--font)">{pctN}%</text>
+          <text x={cx} y={cy + 13} textAnchor="middle" fontSize="10" fill="var(--text3)"
+            fontFamily="var(--font)">tap for details</text>
+        </svg>
+      </div>
+      {open && (
+        <div className="fade" style={{
+          display:'flex',gap:24,justifyContent:'center',
+          background:'var(--surface)',border:'1px solid var(--border)',
+          borderRadius:'var(--r)',padding:'10px 24px',marginTop:2,
+        }}>
+          {[
+            {n: submitted,         l:'Submitted', c:'var(--green)'},
+            {n: total,             l:'Total',     c:'var(--text)'},
+            {n: total - submitted, l:'Pending',   c:'var(--red)'},
+          ].map(s => (
+            <div key={s.l} style={{textAlign:'center'}}>
+              <div style={{fontSize:'1.3rem',fontWeight:700,color:s.c,letterSpacing:'-0.04em'}}>{s.n}</div>
+              <div style={{fontSize:'0.65rem',fontWeight:700,color:'var(--text3)',fontFamily:'var(--mono)',textTransform:'uppercase',letterSpacing:'0.06em',marginTop:2}}>{s.l}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Edit popup ────────────────────────────────────────────────
 function EditPopup({ student, headers, onSave, onClose }) {
   const [vals, setVals] = useState({...student})
@@ -15,7 +68,8 @@ function EditPopup({ student, headers, onSave, onClose }) {
       const editable = {}
       editableHeaders.forEach(h => { editable[h] = vals[h] || '' })
       await api.updateRow(vals[adCol], editable)
-      onSave({...vals})
+      await api.markSubmitted(vals[adCol])
+      onSave({...vals}, true)
     } catch(e) { alert(e.message) }
     finally { setSaving(false) }
   }
@@ -53,7 +107,6 @@ function EditPopup({ student, headers, onSave, onClose }) {
                 className="input"
                 value={vals[h]||''}
                 onChange={e => setVals(v => ({...v, [h]: e.target.value}))}
-                placeholder={`Enter ${h.toLowerCase()}`}
               />
             </div>
           ))}
@@ -62,9 +115,113 @@ function EditPopup({ student, headers, onSave, onClose }) {
         <div style={{display:'flex',gap:10,marginTop:20}}>
           <button className="btn btn-outline" onClick={onClose} style={{flex:1}}>Cancel</button>
           <button className="btn btn-primary" onClick={save} disabled={saving} style={{flex:2}}>
-            {saving ? <><span className="spin spin-sm spin-white"/>Saving…</> : 'Save changes'}
+            {saving ? <><span className="spin spin-sm spin-white"/>Saving…</> : 'Save & Mark Submitted'}
           </button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Batch Visibility Settings ─────────────────────────────────
+function BatchSettings({ batches }) {
+  const maxAvailable = batches.length > 0
+    ? Math.max(...batches.map(b => parseInt(b.batch) || 0))
+    : 18
+  const stored = parseInt(localStorage.getItem('imad_max_batch') || '0') || maxAvailable
+  const [val, setVal] = useState(stored)
+  const [saved, setSaved] = useState(false)
+
+  const selected = batches.filter(b => (parseInt(b.batch) || 0) <= val)
+  const totalStudents = selected.reduce((a,b) => a + b.total, 0)
+
+  function save() {
+    localStorage.setItem('imad_max_batch', String(val))
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  return (
+    <div className="fade">
+      <div className="sec-head" style={{marginBottom:10}}>
+        <span className="sec-num">01</span>
+        <span className="sec-label">Active Batch Range</span>
+      </div>
+      <div className="card" style={{marginBottom:20}}>
+        <p style={{fontSize:'0.85rem',color:'var(--text2)',marginBottom:18}}>
+          Set how many batches are visible on the public page and batch selector. Batches above this number will be hidden from students and coordinators.
+        </p>
+        <div className="field" style={{marginBottom:16}}>
+          <label className="label">Show batches 1 to</label>
+          <div style={{display:'flex',alignItems:'center',gap:12}}>
+            <input
+              type="range" min={1} max={maxAvailable}
+              value={val}
+              onChange={e => setVal(parseInt(e.target.value))}
+              style={{flex:1, accentColor:'var(--accent)'}}
+            />
+            <div style={{
+              minWidth:48,height:40,borderRadius:'var(--r-sm)',
+              background:'var(--accent)',color:'#fff',
+              display:'flex',alignItems:'center',justifyContent:'center',
+              fontFamily:'var(--mono)',fontWeight:700,fontSize:'1.1rem',
+            }}>
+              {val}
+            </div>
+          </div>
+        </div>
+        <div className="card card-sm" style={{background:'var(--bg2)',marginBottom:16}}>
+          <div style={{display:'flex',gap:24,alignItems:'center'}}>
+            <div>
+              <div style={{fontSize:'0.67rem',fontWeight:700,color:'var(--text3)',fontFamily:'var(--mono)',textTransform:'uppercase',letterSpacing:'0.06em'}}>Selected batches</div>
+              <div style={{fontSize:'1.4rem',fontWeight:700,letterSpacing:'-0.03em'}}>{selected.length}</div>
+            </div>
+            <div>
+              <div style={{fontSize:'0.67rem',fontWeight:700,color:'var(--text3)',fontFamily:'var(--mono)',textTransform:'uppercase',letterSpacing:'0.06em'}}>Total students</div>
+              <div style={{fontSize:'1.4rem',fontWeight:700,letterSpacing:'-0.03em'}}>{totalStudents}</div>
+            </div>
+          </div>
+        </div>
+        <button className="btn btn-primary" onClick={save} style={{width:'100%',height:44}}>
+          {saved ? '✓ Saved' : 'Save Setting'}
+        </button>
+        {saved && (
+          <p style={{fontSize:'0.78rem',color:'var(--text3)',textAlign:'center',marginTop:8}}>
+            Reload the page to see the change in the public view.
+          </p>
+        )}
+      </div>
+
+      <div className="sec-head" style={{marginBottom:10}}>
+        <span className="sec-num">02</span>
+        <span className="sec-label">Batch Preview</span>
+      </div>
+      <div className="card" style={{padding:0,overflow:'hidden',marginBottom:32}}>
+        <table className="tbl">
+          <thead>
+            <tr>
+              <th>Batch</th>
+              <th>Students</th>
+              <th>Visible</th>
+            </tr>
+          </thead>
+          <tbody>
+            {batches.map(b => {
+              const visible = (parseInt(b.batch) || 0) <= val
+              return (
+                <tr key={b.batch}>
+                  <td style={{fontFamily:'var(--mono)',fontWeight:600}}>Batch {b.batch}</td>
+                  <td style={{fontFamily:'var(--mono)'}}>{b.total}</td>
+                  <td>
+                    <span className={`badge ${visible ? 'badge-green' : 'badge-gray'}`}>
+                      {visible ? '✓ Visible' : 'Hidden'}
+                    </span>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   )
@@ -105,14 +262,13 @@ export default function AdminView({ password, onStudentSelect }) {
       const blob = new Blob([csv], {type:'text/csv'})
       const a = document.createElement('a')
       a.href = URL.createObjectURL(blob)
-      a.download = `DIA_Students_${new Date().toISOString().slice(0,10)}.csv`
+      a.download = `IMAD_Students_${new Date().toISOString().slice(0,10)}.csv`
       a.click()
       setCsvMsg('Downloaded!')
     } catch(e) { setCsvMsg('Error: ' + e.message) }
     setTimeout(() => setCsvMsg(''), 3000)
   }
 
-  // Filtered + sorted complete data
   const filteredStudents = useMemo(() => {
     if (!allData) return []
     const { headers, students } = allData
@@ -179,12 +335,12 @@ export default function AdminView({ password, onStudentSelect }) {
     return <th onClick={toggle}>{label} {active ? (dir>0?'↑':'↓') : <span style={{opacity:0.3}}>↕</span>}</th>
   }
 
-  function updateLocal(updated) {
+  function updateLocal(updated, wasSubmitted) {
     setAllData(prev => {
       if (!prev) return prev
       const students = prev.students.map(s =>
         s[prev.headers[0]] === updated[prev.headers[0]]
-          ? { ...updated, _submitted: !!updated[prev.headers.find(h=>h.toLowerCase().includes('phone'))], _rowIndex: s._rowIndex }
+          ? { ...updated, _submitted: wasSubmitted ?? s._submitted, _rowIndex: s._rowIndex }
           : s
       )
       return { ...prev, students }
@@ -196,45 +352,24 @@ export default function AdminView({ password, onStudentSelect }) {
   if (error)   return <div className="wrap" style={{paddingTop:40}}><div className="alert alert-error">{error}</div></div>
 
   const { totalStudents, totalSubmitted } = stats
-  const totalPct = totalStudents ? Math.round(totalSubmitted/totalStudents*100) : 0
 
   const TABS = [
-    {id:'overview', label:'Overview'},
+    {id:'overview',  label:'Overview'},
     {id:'analytics', label:'Analytics'},
-    {id:'complete', label:'Complete Data'},
+    {id:'complete',  label:'Complete Data'},
+    {id:'settings',  label:'Settings'},
   ]
 
   return (
     <div className="wrap" style={{paddingTop:20}}>
-      <div style={{marginBottom:20}}>
+      <div style={{marginBottom:16}}>
         <div style={{fontSize:'0.67rem',fontWeight:700,letterSpacing:'0.1em',color:'var(--text3)',fontFamily:'var(--mono)',textTransform:'uppercase',marginBottom:4}}>Admin</div>
-        <h1 style={{fontSize:'1.6rem',marginBottom:4}}>Dashboard</h1>
+        <h1 style={{fontSize:'1.6rem',marginBottom:0}}>Dashboard</h1>
       </div>
 
-      {/* Top stats */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:10,marginBottom:16}}>
-        {[
-          {n:`${totalSubmitted}/${totalStudents}`, l:'Total Submitted', c:'var(--green)'},
-          {n:`${totalPct}%`, l:'Overall Complete', c:totalPct>=80?'var(--green)':totalPct>=50?'var(--amber)':'var(--red)'},
-          {n:stats.batches.filter(b=>b.submitted>=b.total).length+'/'+stats.batches.length, l:'Batches Done', c:'var(--blue)'},
-          {n:totalStudents-totalSubmitted, l:'Still Pending', c:'var(--red)'},
-        ].map(s=>(
-          <div key={s.l} className="card stat" style={{padding:'14px 16px'}}>
-            <div className="stat-n" style={{color:s.c,fontSize:'1.6rem'}}>{s.n}</div>
-            <div className="stat-l">{s.l}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Progress bar */}
-      <div className="card" style={{marginBottom:16}}>
-        <div style={{display:'flex',justifyContent:'space-between',marginBottom:8,fontSize:'0.85rem',fontWeight:600}}>
-          <span>Overall progress</span>
-          <span style={{fontFamily:'var(--mono)',color:'var(--text2)'}}>{totalSubmitted}/{totalStudents}</span>
-        </div>
-        <div className="track" style={{height:9}}>
-          <div className={`fill ${totalPct>=80?'hi':totalPct>=50?'mid':'lo'}`} style={{width:totalPct+'%'}} />
-        </div>
+      {/* Radial gauge */}
+      <div style={{display:'flex',justifyContent:'center',marginBottom:16}}>
+        <RadialGauge submitted={totalSubmitted} total={totalStudents} />
       </div>
 
       {/* Tabs */}
@@ -258,10 +393,10 @@ export default function AdminView({ password, onStudentSelect }) {
               <table className="tbl">
                 <thead>
                   <tr>
-                    <SortTh label="Batch" k="batch" col="ov"/>
+                    <SortTh label="Batch"     k="batch"     col="ov"/>
                     <SortTh label="Submitted" k="submitted" col="ov"/>
-                    <SortTh label="Total" k="total" col="ov"/>
-                    <SortTh label="%" k="pct" col="ov"/>
+                    <SortTh label="Total"     k="total"     col="ov"/>
+                    <SortTh label="%"         k="pct"       col="ov"/>
                     <th>Progress</th>
                     <th>Missing Nos.</th>
                   </tr>
@@ -301,7 +436,6 @@ export default function AdminView({ password, onStudentSelect }) {
       {/* ── ANALYTICS TAB ── */}
       {tab === 'analytics' && (
         <div className="fade">
-          {/* Missing ad numbers */}
           <div className="sec-head" style={{marginBottom:10}}>
             <span className="sec-num">01</span>
             <span className="sec-label">Missing Admission Numbers</span>
@@ -323,7 +457,6 @@ export default function AdminView({ password, onStudentSelect }) {
             )}
           </div>
 
-          {/* Field fill rates */}
           <div className="sec-head" style={{marginBottom:10}}>
             <span className="sec-num">02</span>
             <span className="sec-label">Field Fill Rates</span>
@@ -343,7 +476,7 @@ export default function AdminView({ password, onStudentSelect }) {
                 </thead>
                 <tbody>
                   {fieldEntries.map(([field, rate]) => (
-                    <tr key={field} style={{cursor:'default'}}>
+                    <tr key={field}>
                       <td style={{fontSize:'0.82rem',maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{field}</td>
                       <td style={{fontFamily:'var(--mono)',fontSize:'0.78rem',color:'var(--text2)'}}>{rate.filled}/{rate.total}</td>
                       <td><span style={{fontFamily:'var(--mono)',fontWeight:700,fontSize:'0.8rem',color:rate.pct>=80?'var(--green)':rate.pct>=50?'var(--amber)':'var(--red)'}}>{rate.pct}%</span></td>
@@ -364,7 +497,6 @@ export default function AdminView({ password, onStudentSelect }) {
       {/* ── COMPLETE DATA TAB ── */}
       {tab === 'complete' && (
         <div className="fade">
-          {/* Filters */}
           <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
             <input
               className="input"
@@ -390,17 +522,16 @@ export default function AdminView({ password, onStudentSelect }) {
             <button className="btn btn-outline btn-sm" onClick={downloadCSV} disabled={!!csvMsg}>{csvMsg||'↓ CSV'}</button>
           </div>
 
-          {/* Table */}
           <div className="card" style={{padding:0,overflow:'hidden',marginBottom:32}}>
             <div style={{overflowX:'auto'}}>
               <table className="tbl">
                 <thead>
                   <tr>
                     <th style={{cursor:'default',width:44,textAlign:'center'}}>Photo</th>
-                    <SortTh label="Ad No"   k={allData?.headers?.[0]} col="cd"/>
-                    <SortTh label="Name"    k={allData?.headers?.find(h=>h.toLowerCase()==='name')} col="cd"/>
-                    <SortTh label="Batch"   k={allData?.headers?.find(h=>h.toLowerCase()==='batch')} col="cd"/>
-                    <SortTh label="Phone"   k={allData?.headers?.find(h=>h.toLowerCase().includes('phone'))} col="cd"/>
+                    <SortTh label="Ad No"   k={allData?.headers?.[0]}                                             col="cd"/>
+                    <SortTh label="Name"    k={allData?.headers?.find(h=>h.toLowerCase()==='name')}               col="cd"/>
+                    <SortTh label="Batch"   k={allData?.headers?.find(h=>h.toLowerCase()==='batch')}              col="cd"/>
+                    <SortTh label="Phone"   k={allData?.headers?.find(h=>h.toLowerCase().includes('phone'))}      col="cd"/>
                     <th>Status</th>
                     <th style={{width:60}}>Edit</th>
                   </tr>
@@ -454,6 +585,11 @@ export default function AdminView({ password, onStudentSelect }) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── SETTINGS TAB ── */}
+      {tab === 'settings' && (
+        <BatchSettings batches={stats.batches} />
       )}
 
       {/* Edit popup */}

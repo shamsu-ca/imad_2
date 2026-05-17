@@ -3,7 +3,9 @@ import { api } from '../lib/api.js'
 import PhotoUpload from '../components/PhotoUpload.jsx'
 
 const READONLY = ['ad no', 'adno', 'name', 'ad. year', 'year', 'batch']
-const isRO = f => READONLY.some(r => f.toLowerCase().replace(/[.\s]/g,'') === r.replace(/[.\s]/g,'') || f.toLowerCase() === r)
+const isRO = f => READONLY.some(r =>
+  f.toLowerCase().replace(/[.\s]/g,'') === r.replace(/[.\s]/g,'') || f.toLowerCase() === r
+)
 
 const DH_OPTS = [
   {value:'',label:'Select status…'},
@@ -16,6 +18,12 @@ const EMP_OPTS = [
   {value:'Self-employed', emoji:'🏢', label:'Self-employed / Entrepreneur'},
   {value:'Employed',      emoji:'💼', label:'Employed'},
   {value:'Higher Studies',emoji:'🎓', label:'Higher Studies'},
+]
+
+const STEPS = [
+  { id: 1, label: 'Personal' },
+  { id: 2, label: 'Academic' },
+  { id: 3, label: 'Employment' },
 ]
 
 function useSaveStatus() {
@@ -37,12 +45,64 @@ function Pill({ status }) {
   return <span className={`save-pill ${status}`}>{labels[status]}</span>
 }
 
-export default function StudentForm({ data }) {
+function StepIndicator({ current, total }) {
+  return (
+    <div className="step-indicator">
+      {Array.from({length: total}, (_, i) => {
+        const n = i + 1
+        const done    = n < current
+        const active  = n === current
+        return (
+          <div key={n} className="step-item">
+            <div className={`step-dot ${active ? 'active' : done ? 'done' : ''}`}>
+              {done ? '✓' : n}
+            </div>
+            <div className={`step-lbl ${active ? 'active' : ''}`}>{STEPS[i].label}</div>
+            {i < total - 1 && <div className={`step-line ${done ? 'done' : ''}`} />}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// Compact read-only strip for pre-filled identity fields
+function PrefilledStrip({ vals, adField, nameField, batchField, yearField }) {
+  const items = [
+    { label: 'Ad No',  value: vals[adField]    || '—' },
+    { label: 'Name',   value: vals[nameField]   || '—' },
+    { label: 'Batch',  value: vals[batchField]  || '—' },
+    { label: 'Year',   value: vals[yearField]   || '—' },
+  ]
+  return (
+    <div style={{
+      background:'var(--bg2)', border:'1px dashed var(--border2)',
+      borderRadius:'var(--r-sm)', padding:'10px 14px',
+      marginBottom:16, display:'grid',
+      gridTemplateColumns:'repeat(auto-fill, minmax(100px, 1fr))', gap:'8px 12px',
+    }}>
+      <div style={{gridColumn:'1/-1',fontSize:'0.6rem',fontWeight:700,color:'var(--text3)',fontFamily:'var(--mono)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:2}}>
+        Pre-filled · read only
+      </div>
+      {items.map(it => (
+        <div key={it.label}>
+          <div style={{fontSize:'0.6rem',color:'var(--text3)',fontFamily:'var(--mono)',marginBottom:1}}>{it.label}</div>
+          <div style={{fontSize:'0.82rem',fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.value}</div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+export default function StudentForm({ data, onBack }) {
   const { student: initial, headers } = data
-  const [vals,    setVals]   = useState(() => ({...initial}))
-  const [ssMap,   mark]      = useSaveStatus()
-  const [saving,  setSaving] = useState(false)
-  const [saveMsg, setSaveMsg] = useState(null)
+  const [vals,       setVals]     = useState(() => ({...initial}))
+  const [ssMap,      mark]        = useSaveStatus()
+  const [step,       setStep]     = useState(1)
+  const [saving,     setSaving]   = useState(false)
+  const [saveMsg,    setSaveMsg]  = useState(null)
+  const [submitted,  setSubmitted]= useState(!!initial._submitted)
+  const [done,       setDone]     = useState(false)
 
   const h = (name) => {
     if (!headers) return name
@@ -76,32 +136,46 @@ export default function StudentForm({ data }) {
     catch(e) { mark(field, 'error') }
   }
 
-  const saveAll = async () => {
+  const saveStep = async () => {
     setSaving(true); setSaveMsg(null)
     try {
       const editable = {}
-      Object.entries(vals).forEach(([k,v]) => { if(!isRO(k)) editable[k] = v })
+      Object.entries(vals).forEach(([k,v]) => { if(!isRO(k) && !k.startsWith('_')) editable[k] = v })
       await api.updateRow(adNo, editable)
-      setSaveMsg({type:'success', text:'All changes saved successfully ✓'})
-    } catch(e) { setSaveMsg({type:'error', text:e.message}) }
-    finally { setSaving(false); setTimeout(() => setSaveMsg(null), 4000) }
+      setSaveMsg({type:'success', text:'Saved ✓'})
+      setTimeout(() => { setSaveMsg(null); setStep(s => s + 1) }, 700)
+    } catch(e) {
+      setSaveMsg({type:'error', text: e.message})
+    } finally { setSaving(false) }
   }
 
-  function TF({label, field, type='text', inputMode, placeholder, hint}) {
+  const finishAndSubmit = async () => {
+    setSaving(true); setSaveMsg(null)
+    try {
+      const editable = {}
+      Object.entries(vals).forEach(([k,v]) => { if(!isRO(k) && !k.startsWith('_')) editable[k] = v })
+      await api.updateRow(adNo, editable)
+      await api.markSubmitted(adNo)
+      setSubmitted(true)
+      setDone(true)
+    } catch(e) {
+      setSaveMsg({type:'error', text: e.message})
+    } finally { setSaving(false) }
+  }
+
+  function TF({ label, field, type='text', inputMode, hint }) {
     const ro = isRO(field)
     const s  = ssMap[field]
     return (
       <div className="field">
         <label className="label">
-          <span className={ro?'label-ro':''}>{label}</span>
-          {ro && <span style={{fontSize:'0.6rem',fontWeight:400,color:'var(--text3)'}}>pre-filled</span>}
+          <span className={ro ? 'label-ro' : ''}>{label}</span>
           <Pill status={s} />
         </label>
         <input
-          className={`input ${ro?'ro':''} ${s&&s!=='idle'?s:''}`}
+          className={`input ${ro ? 'ro' : ''} ${s && s !== 'idle' ? s : ''}`}
           type={type} inputMode={inputMode}
-          placeholder={ro?'':placeholder}
-          value={vals[field]??''}
+          value={vals[field] ?? ''}
           readOnly={ro}
           onChange={ro ? undefined : e => set(field, e.target.value)}
           onBlur={ro ? undefined : e => autoSave(field, e.target.value)}
@@ -111,14 +185,14 @@ export default function StudentForm({ data }) {
     )
   }
 
-  function SF({label, field, options}) {
+  function SF({ label, field, options }) {
     const s = ssMap[field]
     return (
       <div className="field">
         <label className="label">{label} <Pill status={s} /></label>
         <select
-          className={`select ${s&&s!=='idle'?s:''}`}
-          value={vals[field]||''}
+          className={`select ${s && s !== 'idle' ? s : ''}`}
+          value={vals[field] || ''}
           onChange={e => { set(field, e.target.value); autoSave(field, e.target.value) }}
         >
           {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -127,7 +201,24 @@ export default function StudentForm({ data }) {
     )
   }
 
-  const submitted = !!(vals[phoneField]||'').trim()
+  // ── Done screen ──────────────────────────────────────────────
+  if (done) {
+    return (
+      <div className="wrap" style={{paddingTop:48, textAlign:'center'}}>
+        <div style={{
+          width:72, height:72, borderRadius:'50%',
+          background:'var(--green-bg)', border:'2px solid var(--green-bd)',
+          display:'flex', alignItems:'center', justifyContent:'center',
+          margin:'0 auto 20px', fontSize:'2rem',
+        }}>✓</div>
+        <h2 style={{fontSize:'1.5rem', marginBottom:8}}>All done!</h2>
+        <p style={{color:'var(--text2)', marginBottom:28, maxWidth:300, margin:'0 auto 28px'}}>
+          Your details have been saved and your record is marked as submitted.
+        </p>
+        <button className="btn btn-outline" onClick={onBack}>← Back to Home</button>
+      </div>
+    )
+  }
 
   return (
     <div className="wrap" style={{paddingTop:20}}>
@@ -148,7 +239,7 @@ export default function StudentForm({ data }) {
               #{vals[adField]} · Batch {vals[batchField]} · {vals[yearField]}
             </div>
             <div style={{marginTop:8}}>
-              <span className={`badge ${submitted?'badge-green':'badge-red'}`}>
+              <span className={`badge ${submitted ? 'badge-green' : 'badge-red'}`}>
                 {submitted ? '✓ Submitted' : '● Pending'}
               </span>
             </div>
@@ -156,103 +247,124 @@ export default function StudentForm({ data }) {
         </div>
       </div>
 
-      {/* 01 Personal */}
-      <div className="sec-head"><span className="sec-num">01</span><span className="sec-label">Personal Information</span></div>
-      <div className="card" style={{marginBottom:20}}>
-        <div style={{display:'flex',flexDirection:'column',gap:14}}>
-          <div className="g2">
-            <TF label={adField}    field={adField} />
-            <TF label={batchField} field={batchField} />
+      {/* Step indicator */}
+      <StepIndicator current={step} total={STEPS.length} />
+
+      {/* ── Step 1: Personal Info ── */}
+      {step === 1 && (
+        <div className="fade">
+          <div className="sec-head" style={{marginBottom:12}}>
+            <span className="sec-num">01</span>
+            <span className="sec-label">Personal Information</span>
           </div>
-          <div className="g2">
-            <TF label={nameField}  field={nameField} />
-            <TF label={yearField}  field={yearField} />
+          <div className="card" style={{marginBottom:16}}>
+            <PrefilledStrip vals={vals} adField={adField} nameField={nameField} batchField={batchField} yearField={yearField} />
+            <div style={{display:'flex',flexDirection:'column',gap:14}}>
+              <TF label="Phone Number" field={phoneField} type="tel" inputMode="tel"
+                hint="Your current active phone number" />
+              <TF label="Email Address" field={emailField} type="email" />
+              <TF label="Address" field={addrField} hint="House / Street / Area" />
+              <TF label="Post Office" field={poField} />
+            </div>
           </div>
-          <TF label="Phone Number" field={phoneField} type="tel" inputMode="tel" placeholder="+91 XXXXX XXXXX" hint="Filling this marks your record as submitted" />
-          <TF label="Email" field={emailField} type="email" placeholder="your@email.com" />
-          <TF label="Address" field={addrField} placeholder="House / Street / Area" />
-          <TF label="Post Office" field={poField} placeholder="Post office name" />
         </div>
-      </div>
+      )}
 
-      {/* 02 Academic */}
-      <div className="sec-head"><span className="sec-num">02</span><span className="sec-label">Academic Details</span></div>
-      <div className="card" style={{marginBottom:20}}>
-        <div style={{display:'flex',flexDirection:'column',gap:14}}>
-          <SF label="DH Status" field={dhField} options={DH_OPTS} />
-          {dhStatus === 'Not completed UG' && (
-            <div className="field fade">
-              <label className="label">Last Attended Class <Pill status={ssMap[lastField]} /></label>
-              <select
-                className={`select ${ssMap[lastField]&&ssMap[lastField]!=='idle'?ssMap[lastField]:''}`}
-                value={vals[lastField]||''}
-                onChange={e => { set(lastField, e.target.value); autoSave(lastField, e.target.value) }}
-              >
-                <option value="">Select class…</option>
-                {Array.from({length:10},(_,i)=>i+1).map(n=>(
-                  <option key={n} value={n}>Class {n}</option>
-                ))}
-              </select>
-            </div>
-          )}
-          <TF label="Educational Qualification" field={qualField} placeholder="e.g. B.A. Arabic" />
-        </div>
-      </div>
-
-      {/* 03 Employment */}
-      <div className="sec-head"><span className="sec-num">03</span><span className="sec-label">Employment Details</span></div>
-      <div className="card" style={{marginBottom:20}}>
-        <div style={{display:'flex',flexDirection:'column',gap:14}}>
-          <div className="field">
-            <label className="label">Current Status</label>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:8}}>
-              {EMP_OPTS.map(opt => (
-                <button
-                  key={opt.value} type="button"
-                  className={`status-pill ${empSt===opt.value?'active':''}`}
-                  onClick={() => { set(h('Current Status'), opt.value); autoSave(h('Current Status'), opt.value) }}
-                >
-                  <div style={{fontSize:'1.1rem',marginBottom:2}}>{opt.emoji}</div>
-                  <div style={{fontSize:'0.8rem',fontWeight:600}}>{opt.label}</div>
-                </button>
-              ))}
-            </div>
+      {/* ── Step 2: Academic ── */}
+      {step === 2 && (
+        <div className="fade">
+          <div className="sec-head" style={{marginBottom:12}}>
+            <span className="sec-num">02</span>
+            <span className="sec-label">Academic Details</span>
           </div>
-
-          {empSt === 'Self-employed' && (
-            <div className="fade" style={{display:'flex',flexDirection:'column',gap:14,borderTop:'1px solid var(--border)',paddingTop:14}}>
-              <TF label="Business Name"      field={h('Business Name')}      placeholder="Your business name" />
-              <TF label="Nature of Business" field={h('Nature of Business')} placeholder="e.g. Retail, Education, IT" />
-              <div className="g2">
-                <TF label="Year Started"    field={h('Year Started')}    type="number" inputMode="numeric" placeholder="2018" />
-                <TF label="Business Location" field={h('Business Location')} placeholder="City" />
-              </div>
-            </div>
-          )}
-
-          {empSt === 'Employed' && (
-            <div className="fade" style={{display:'flex',flexDirection:'column',gap:14,borderTop:'1px solid var(--border)',paddingTop:14}}>
-              <SF label="Designation" field={h('Designation')} options={[
-                {value:'',label:'Select designation…'},
-                ...DESIGNATIONS.map(d => ({value:d,label:d}))
-              ]} />
-              {desig === 'Other' && (
-                <TF label="Custom Designation" field={h('Custom Designation')} placeholder="Enter your designation" />
+          <div className="card" style={{marginBottom:16}}>
+            <PrefilledStrip vals={vals} adField={adField} nameField={nameField} batchField={batchField} yearField={yearField} />
+            <div style={{display:'flex',flexDirection:'column',gap:14}}>
+              <SF label="DH Status" field={dhField} options={DH_OPTS} />
+              {dhStatus === 'Not completed UG' && (
+                <div className="field fade">
+                  <label className="label">Last Attended Class <Pill status={ssMap[lastField]} /></label>
+                  <select
+                    className={`select ${ssMap[lastField] && ssMap[lastField] !== 'idle' ? ssMap[lastField] : ''}`}
+                    value={vals[lastField] || ''}
+                    onChange={e => { set(lastField, e.target.value); autoSave(lastField, e.target.value) }}
+                  >
+                    <option value="">Select class…</option>
+                    {Array.from({length:10}, (_, i) => i + 1).map(n => (
+                      <option key={n} value={n}>Class {n}</option>
+                    ))}
+                  </select>
+                </div>
               )}
-              <TF label="Organisation Name" field={h('Organisation Name')} placeholder="Where you work" />
-              <TF label="Work Location"     field={h('Work Location')}     placeholder="City / District" />
+              <TF label="Educational Qualification" field={qualField}
+                hint="e.g. B.A. Arabic, B.Tech" />
             </div>
-          )}
-
-          {empSt === 'Higher Studies' && (
-            <div className="fade" style={{display:'flex',flexDirection:'column',gap:14,borderTop:'1px solid var(--border)',paddingTop:14}}>
-              <TF label="Course"                 field={h('Course')}      placeholder="e.g. M.A. Arabic, MBA" />
-              <TF label="University / Institution" field={h('University')} placeholder="Institution name" />
-              <TF label="Year of Completion"     field={h('Year of Completion')} type="number" inputMode="numeric" placeholder="2026" />
-            </div>
-          )}
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* ── Step 3: Employment ── */}
+      {step === 3 && (
+        <div className="fade">
+          <div className="sec-head" style={{marginBottom:12}}>
+            <span className="sec-num">03</span>
+            <span className="sec-label">Employment Details</span>
+          </div>
+          <div className="card" style={{marginBottom:16}}>
+            <PrefilledStrip vals={vals} adField={adField} nameField={nameField} batchField={batchField} yearField={yearField} />
+            <div style={{display:'flex',flexDirection:'column',gap:14}}>
+              <div className="field">
+                <label className="label">Current Status</label>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:8}}>
+                  {EMP_OPTS.map(opt => (
+                    <button
+                      key={opt.value} type="button"
+                      className={`status-pill ${empSt === opt.value ? 'active' : ''}`}
+                      onClick={() => { set(h('Current Status'), opt.value); autoSave(h('Current Status'), opt.value) }}
+                    >
+                      <div style={{fontSize:'1.1rem',marginBottom:2}}>{opt.emoji}</div>
+                      <div style={{fontSize:'0.8rem',fontWeight:600}}>{opt.label}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {empSt === 'Self-employed' && (
+                <div className="fade" style={{display:'flex',flexDirection:'column',gap:14,borderTop:'1px solid var(--border)',paddingTop:14}}>
+                  <TF label="Business Name"      field={h('Business Name')} />
+                  <TF label="Nature of Business" field={h('Nature of Business')} hint="e.g. Retail, Education, IT" />
+                  <div className="g2">
+                    <TF label="Year Started"      field={h('Year Started')} type="number" inputMode="numeric" hint="e.g. 2018" />
+                    <TF label="Business Location" field={h('Business Location')} hint="City" />
+                  </div>
+                </div>
+              )}
+
+              {empSt === 'Employed' && (
+                <div className="fade" style={{display:'flex',flexDirection:'column',gap:14,borderTop:'1px solid var(--border)',paddingTop:14}}>
+                  <SF label="Designation" field={h('Designation')} options={[
+                    {value:'', label:'Select designation…'},
+                    ...DESIGNATIONS.map(d => ({value:d, label:d}))
+                  ]} />
+                  {desig === 'Other' && (
+                    <TF label="Custom Designation" field={h('Custom Designation')} hint="Enter your designation" />
+                  )}
+                  <TF label="Organisation Name" field={h('Organisation Name')} />
+                  <TF label="Work Location"     field={h('Work Location')} hint="City / District" />
+                </div>
+              )}
+
+              {empSt === 'Higher Studies' && (
+                <div className="fade" style={{display:'flex',flexDirection:'column',gap:14,borderTop:'1px solid var(--border)',paddingTop:14}}>
+                  <TF label="Course"               field={h('Course')}      hint="e.g. M.A. Arabic, MBA" />
+                  <TF label="University / Institution" field={h('University')} />
+                  <TF label="Year of Completion"   field={h('Year of Completion')} type="number" inputMode="numeric" hint="e.g. 2026" />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Save message */}
       {saveMsg && (
@@ -261,14 +373,42 @@ export default function StudentForm({ data }) {
         </div>
       )}
 
-      {/* Bottom save bar */}
+      {/* Bottom navigation bar */}
       <div className="bottom-bar">
-        <div className="bottom-bar-inner">
-          <button className="btn btn-primary btn-full" onClick={saveAll} disabled={saving} style={{height:46}}>
-            {saving
-              ? <><span className="spin spin-sm spin-white"/>Saving all fields…</>
-              : '💾  Save all changes'}
-          </button>
+        <div className="bottom-bar-inner" style={{display:'flex',gap:10}}>
+          {step > 1 && (
+            <button
+              className="btn btn-outline"
+              onClick={() => { setSaveMsg(null); setStep(s => s - 1) }}
+              disabled={saving}
+              style={{height:46, flex:1}}
+            >
+              ← Back
+            </button>
+          )}
+          {step < STEPS.length ? (
+            <button
+              className="btn btn-primary"
+              onClick={saveStep}
+              disabled={saving}
+              style={{height:46, flex:2}}
+            >
+              {saving
+                ? <><span className="spin spin-sm spin-white"/>Saving…</>
+                : 'Save & Continue →'}
+            </button>
+          ) : (
+            <button
+              className="btn btn-primary"
+              onClick={finishAndSubmit}
+              disabled={saving}
+              style={{height:46, flex:2, background:'var(--green)', borderColor:'var(--green)'}}
+            >
+              {saving
+                ? <><span className="spin spin-sm spin-white"/>Submitting…</>
+                : '✓ Submit & Finish'}
+            </button>
+          )}
         </div>
       </div>
     </div>

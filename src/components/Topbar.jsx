@@ -1,6 +1,10 @@
 import { useState } from 'react'
 import { api } from '../lib/api.js'
 
+function getMaxBatch() {
+  return parseInt(localStorage.getItem('imad_max_batch') || '18') || 18
+}
+
 export default function Topbar({ view, onHome, onBatch, onAdmin }) {
   const [modal,   setModal]   = useState(null)
   const [batch,   setBatch]   = useState('')
@@ -32,15 +36,20 @@ export default function Topbar({ view, onHome, onBatch, onAdmin }) {
     finally { setLoading(false) }
   }
 
+  // Show batch/admin buttons only on the public landing page and dashboard views
+  const showDashboardButtons = view === 'public'
+  const maxBatch = getMaxBatch()
+  const batchOptions = Array.from({ length: maxBatch }, (_, i) => i + 1)
+
   return (
     <>
       <header className="topbar">
-        <div class="topbar-inner">
+        <div className="topbar-inner">
           <button className="logo-mark" onClick={onHome}>
             <div className="logo-icon">
-              <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+              <img src="/logo.svg" alt="IMAD" style={{width:18,height:18,objectFit:'contain'}} onError={e=>{e.target.style.display='none'}} />
             </div>
-            <span className="logo-text">DIA</span>
+            <span className="logo-text">IMAD</span>
           </button>
           {view !== 'public' && (
             <span className="topbar-title">
@@ -51,11 +60,11 @@ export default function Topbar({ view, onHome, onBatch, onAdmin }) {
           )}
           <div className="topbar-spacer" />
           <div className="topbar-actions">
-            {view !== 'batch' && view !== 'admin' && (
-              <button className="btn btn-ghost btn-sm" onClick={() => setModal('batch')}>Batch</button>
-            )}
-            {view !== 'admin' && (
-              <button className="btn btn-ghost btn-sm" onClick={() => setModal('admin')}>Admin</button>
+            {showDashboardButtons && (
+              <>
+                <button className="btn btn-ghost btn-sm" onClick={() => setModal('batch')}>Batch</button>
+                <button className="btn btn-ghost btn-sm" onClick={() => setModal('admin')}>Admin</button>
+              </>
             )}
             {view !== 'public' && (
               <button className="btn btn-outline btn-sm" onClick={onHome}>← Home</button>
@@ -81,14 +90,14 @@ export default function Topbar({ view, onHome, onBatch, onAdmin }) {
                   <label className="label">Batch Number</label>
                   <select className="select" value={batch} onChange={e=>setBatch(e.target.value)} required>
                     <option value="">Select batch…</option>
-                    {Array.from({length:18},(_,i)=>i+1).map(n=>(
+                    {batchOptions.map(n=>(
                       <option key={n} value={n}>Batch {n}</option>
                     ))}
                   </select>
                 </div>
                 <div className="field">
                   <label className="label">Access Code</label>
-                  <input className="input" type="password" placeholder="Enter batch access code" value={code} onChange={e=>setCode(e.target.value)} required autoComplete="off" />
+                  <input className="input" type="password" value={code} onChange={e=>setCode(e.target.value)} required autoComplete="off" />
                 </div>
                 {error && <div className="alert alert-error">{error}</div>}
                 <button className="btn btn-primary btn-full" type="submit" disabled={loading} style={{marginTop:4}}>
@@ -101,7 +110,7 @@ export default function Topbar({ view, onHome, onBatch, onAdmin }) {
               <form onSubmit={submitAdmin} style={{display:'flex',flexDirection:'column',gap:14}}>
                 <div className="field">
                   <label className="label">Admin Password</label>
-                  <input className="input" type="password" placeholder="Enter admin password" value={pass} onChange={e=>setPass(e.target.value)} required autoFocus />
+                  <input className="input" type="password" value={pass} onChange={e=>setPass(e.target.value)} required autoFocus />
                 </div>
                 {error && <div className="alert alert-error">{error}</div>}
                 <button className="btn btn-primary btn-full" type="submit" disabled={loading} style={{marginTop:4}}>

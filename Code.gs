@@ -1,5 +1,5 @@
 // ============================================================
-//  DIA Students Data Collection — Apps Script Backend v2.1
+//  IMAD Students Data Collection — Apps Script Backend v2.2
 //  Deploy as Web App: Execute as Me, Anyone can access
 // ============================================================
 
@@ -8,24 +8,22 @@ const BASE_TAB      = "base";
 const CODES_TAB     = "codes";
 const ADMIN_KEY     = "DIA_ADMIN_PASS";
 const DRIVE_FOLDER  = "DIA_PHOTOS_FOLDER_ID";
+const SUBMITTED_COL = "Submitted At";
 
-function cors(output) {
-  return output
-    .setMimeType(ContentService.MimeType.JSON)
-    .addHeader("Access-Control-Allow-Origin", "*")
-    .addHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
-    .addHeader("Access-Control-Allow-Headers", "Content-Type");
+function json(data) {
+  return ContentService.createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
 }
-function ok(data)  { return cors(ContentService.createTextOutput(JSON.stringify({ ok: true,  data }))); }
-function err(msg)  { return cors(ContentService.createTextOutput(JSON.stringify({ ok: false, error: msg }))); }
-
-function doOptions() {
-  return ContentService.createTextOutput("")
-    .addHeader("Access-Control-Allow-Origin", "*")
-    .addHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
-    .addHeader("Access-Control-Allow-Headers", "Content-Type");
+function ok(data)  { return json({ ok: true,  data }); }
+function err(msg)  { return json({ ok: false, error: msg }); }
+function doGet(e) {
+  if (e.parameter.payload) {
+    let body = {};
+    try { body = JSON.parse(e.parameter.payload); } catch(_) {}
+    return route(body.action, e.parameter, body);
+  }
+  return route(e.parameter.action, e.parameter, {});
 }
-function doGet(e)  { return route(e.parameter.action, e.parameter, {}); }
 function doPost(e) {
   let body = {};
   try { body = JSON.parse(e.postData.contents); } catch(_) {}
@@ -38,6 +36,7 @@ function route(action, qp, body) {
       case "getStudent":        return ok(getStudent(qp.adNo || body.adNo));
       case "updateField":       return ok(updateField(body.adNo, body.field, body.value));
       case "updateRow":         return ok(updateRow(body.adNo, body.values));
+      case "markSubmitted":     return ok(markSubmitted(body.adNo));
       case "getBatchSummaries": return ok(getBatchSummaries());
       case "validateBatch":     return ok(validateBatch(body.batch, body.code));
       case "getBatchStudents":  return ok(getBatchStudents(body.batch, body.code));
@@ -73,13 +72,31 @@ function getColIndex(headers, name) {
   return headers.findIndex(h => h.toLowerCase() === lower || h.toLowerCase().includes(lower));
 }
 
+// Returns the column index of the "Submitted At" column, or -1 if not found
+function getSubmittedColIndex(headers) {
+  return headers.findIndex(h => {
+    const l = h.toLowerCase().replace(/\s/g, '');
+    return l === 'submittedat' || l === 'submitted';
+  });
+}
+
+// Determines whether a row counts as submitted.
+// Uses "Submitted At" column if present; falls back to phone number for legacy data.
+function isSubmitted(row, headers) {
+  const subCol = getSubmittedColIndex(headers);
+  if (subCol >= 0) return !!String(row[subCol] || '').trim();
+  const phoneCol = getColIndex(headers, 'phone');
+  return phoneCol >= 0 && !!String(row[phoneCol] || '').trim();
+}
+
 function getStudent(adNo) {
   if (!adNo) throw new Error("adNo required");
   const { headers, rows } = getAllData();
   for (let i = 0; i < rows.length; i++) {
     if (String(rows[i][0]).trim() === String(adNo).trim()) {
       const student = rowToObj(headers, rows[i]);
-      student._photoUrl = getPhotoUrl(adNo);
+      student._photoUrl  = getPhotoUrl(adNo);
+      student._submitted = isSubmitted(rows[i], headers);
       return { rowIndex: i + 2, student, headers };
     }
   }
@@ -116,17 +133,38 @@ function updateRow(adNo, values) {
   throw new Error("Student not found: " + adNo);
 }
 
+// Marks a student as submitted. Creates the "Submitted At" column if it doesn't exist.
+function markSubmitted(adNo) {
+  if (!adNo) throw new Error("adNo required");
+  const sh = getSheet();
+  const raw = sh.getDataRange().getValues();
+  const headers = raw[0].map(h => String(h).trim());
+
+  let subCol = getSubmittedColIndex(headers);
+  if (subCol === -1) {
+    subCol = headers.length;
+    sh.getRange(1, subCol + 1).setValue(SUBMITTED_COL);
+  }
+
+  for (let i = 1; i < raw.length; i++) {
+    if (String(raw[i][0]).trim() === String(adNo).trim()) {
+      sh.getRange(i + 1, subCol + 1).setValue(new Date().toISOString());
+      return { marked: true };
+    }
+  }
+  throw new Error("Student not found: " + adNo);
+}
+
 function getBatchSummaries() {
   const { headers, rows } = getAllData();
   const batchCol = getColIndex(headers, "batch");
-  const phoneCol = getColIndex(headers, "phone");
   const map = {};
   rows.forEach(row => {
     const batch = String(row[batchCol] || "").trim();
     if (!batch) return;
     if (!map[batch]) map[batch] = { batch, total: 0, submitted: 0 };
     map[batch].total++;
-    if (String(row[phoneCol] || "").trim()) map[batch].submitted++;
+    if (isSubmitted(row, headers)) map[batch].submitted++;
   });
   return Object.values(map).sort((a, b) => {
     const n = s => parseInt(s.replace(/\D/g,""))||0;
@@ -136,26 +174,32 @@ function getBatchSummaries() {
 
 function validateBatch(batch, code) {
   const csh = getCodesSheet();
-  if (!csh) throw new Error("'codes' sheet not found. Create it with columns: BatchNo, Code");
+  if (!csh) throw new Error("'codes' sheet not found");
   const data = csh.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
-    if (String(data[i][0]).trim() === String(batch).trim() &&
-        String(data[i][1]).trim() === String(code).trim()) return true;
+    const rowBatch = String(data[i][0]).trim();
+    const rowCode  = String(data[i][1]).trim().toLowerCase();
+    if (rowBatch === String(batch).trim() && rowCode === String(code).trim().toLowerCase()) return true;
   }
   return false;
+}
+
+function testBatch(batch, code) {
+  const result = validateBatch(batch, code);
+  Logger.log("validateBatch(%s, %s) => %s", batch, code, result);
+  return result;
 }
 
 function getBatchStudents(batch, code) {
   if (!validateBatch(batch, code)) throw new Error("Invalid batch code");
   const { headers, rows } = getAllData();
   const batchCol = getColIndex(headers, "batch");
-  const phoneCol = getColIndex(headers, "phone");
   const students = [];
   rows.forEach((row, i) => {
     if (String(row[batchCol] || "").trim() === String(batch).trim()) {
       const obj = rowToObj(headers, row);
       obj._rowIndex  = i + 2;
-      obj._submitted = !!String(row[phoneCol] || "").trim();
+      obj._submitted = isSubmitted(row, headers);
       obj._photoUrl  = getPhotoUrl(row[0]);
       students.push(obj);
     }
@@ -173,7 +217,6 @@ function getAdminStats(password) {
   if (!validateAdmin(password)) throw new Error("Unauthorized");
   const { headers, rows } = getAllData();
   const batchCol = getColIndex(headers, "batch");
-  const phoneCol = getColIndex(headers, "phone");
   const batchMap = {};
   rows.forEach(row => {
     const batch = String(row[batchCol] || "").trim();
@@ -182,7 +225,7 @@ function getAdminStats(password) {
     batchMap[batch].total++;
     const adNo = parseInt(row[0]);
     if (adNo) batchMap[batch].adNos.push(adNo);
-    if (String(row[phoneCol] || "").trim()) batchMap[batch].submitted++;
+    if (isSubmitted(row, headers)) batchMap[batch].submitted++;
   });
   Object.values(batchMap).forEach(b => {
     const sorted = b.adNos.sort((a,z) => a-z);
@@ -199,11 +242,13 @@ function getAdminStats(password) {
     const filled = rows.filter(r => String(r[col] || "").trim()).length;
     fieldRates[h] = { filled, total: rows.length, pct: rows.length ? Math.round(filled / rows.length * 100) : 0 };
   });
+  const totalStudents  = rows.length;
+  const totalSubmitted = rows.filter(r => isSubmitted(r, headers)).length;
   return {
     batches: Object.values(batchMap).sort((a,b) => (parseInt(a.batch)||0)-(parseInt(b.batch)||0)),
     fieldRates,
-    totalStudents:  rows.length,
-    totalSubmitted: rows.filter(r => String(r[phoneCol]||"").trim()).length,
+    totalStudents,
+    totalSubmitted,
     headers,
   };
 }
@@ -211,11 +256,10 @@ function getAdminStats(password) {
 function getAllStudents(password) {
   if (!validateAdmin(password)) throw new Error("Unauthorized");
   const { headers, rows } = getAllData();
-  const phoneCol = getColIndex(headers, "phone");
   const students = rows.map((row, i) => {
     const obj = rowToObj(headers, row);
     obj._rowIndex  = i + 2;
-    obj._submitted = !!String(row[phoneCol] || "").trim();
+    obj._submitted = isSubmitted(row, headers);
     return obj;
   });
   return { headers, students };
@@ -231,7 +275,7 @@ function exportCSV(password) {
 function getOrCreateFolder() {
   const folderId = PropertiesService.getScriptProperties().getProperty(DRIVE_FOLDER);
   if (folderId) { try { return DriveApp.getFolderById(folderId); } catch(_) {} }
-  const folder = DriveApp.createFolder("DIA Student Photos");
+  const folder = DriveApp.createFolder("IMAD Student Photos");
   PropertiesService.getScriptProperties().setProperty(DRIVE_FOLDER, folder.getId());
   return folder;
 }
