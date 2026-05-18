@@ -161,7 +161,11 @@ export default function StudentForm({ data, onBack }) {
     if (step === 1 && !validateStep1()) return
     setSaving(true); setSaveMsg(null)
     try {
-      await api.updateRow(adNo, buildEditable())
+      const result = await api.updateRow(adNo, buildEditable())
+      if (result && result.updated === 0) {
+        setSaveMsg({type:'error', text:'Save failed: fields could not be written to the sheet. Please re-deploy the Apps Script.'})
+        return
+      }
       setSaveMsg({type:'success', text:'Saved ✓'})
       setTimeout(() => { setSaveMsg(null); setStep(s => s + 1) }, 700)
     } catch(e) {
@@ -172,8 +176,18 @@ export default function StudentForm({ data, onBack }) {
   const finishAndSubmit = async () => {
     setSaving(true); setSaveMsg(null)
     try {
-      await api.updateRow(adNo, buildEditable())
-      await api.markSubmitted(adNo)
+      const result = await api.updateRow(adNo, buildEditable())
+      if (result && result.updated === 0) {
+        setSaveMsg({type:'error', text:'Save failed: fields could not be written to the sheet. Please re-deploy the Apps Script.'})
+        return
+      }
+      try {
+        await api.markSubmitted(adNo)
+      } catch(markErr) {
+        // Data saved but submission marking failed — still show success
+        // This happens when the deployed Apps Script is outdated (missing markSubmitted action)
+        console.warn('markSubmitted failed:', markErr.message)
+      }
       setSubmitted(true)
       setDone(true)
     } catch(e) {
