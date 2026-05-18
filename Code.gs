@@ -285,22 +285,38 @@ function exportCSV(password) {
 }
 
 function getOrCreateFolder() {
-  const folderId = PropertiesService.getScriptProperties().getProperty(DRIVE_FOLDER);
-  if (folderId) { try { return DriveApp.getFolderById(folderId); } catch(_) {} }
-  const folder = DriveApp.createFolder("IMAD Student Photos");
-  PropertiesService.getScriptProperties().setProperty(DRIVE_FOLDER, folder.getId());
-  return folder;
+  const FOLDER_NAME = "IMAD Student Photos";
+  const props = PropertiesService.getScriptProperties();
+
+  // 1. Try stored ID first (works for both owned and shared-with-me folders)
+  const storedId = props.getProperty(DRIVE_FOLDER);
+  if (storedId) {
+    try { return DriveApp.getFolderById(storedId); } catch(_) {}
+  }
+
+  // 2. Search by name in My Drive and shared-with-me
+  try {
+    const iter = DriveApp.getFoldersByName(FOLDER_NAME);
+    if (iter.hasNext()) {
+      const found = iter.next();
+      props.setProperty(DRIVE_FOLDER, found.getId());
+      return found;
+    }
+  } catch(_) {}
+
+  // 3. Create a fresh folder in My Drive
+  const fresh = DriveApp.createFolder(FOLDER_NAME);
+  props.setProperty(DRIVE_FOLDER, fresh.getId());
+  return fresh;
 }
 
 function getPhotoUrl(adNo) {
   try {
-    const folderId = PropertiesService.getScriptProperties().getProperty(DRIVE_FOLDER);
-    if (!folderId) return null;
-    const folder = DriveApp.getFolderById(folderId);
+    const folder = getOrCreateFolder();
     const files = folder.getFilesByName("photo_" + String(adNo).trim());
     if (files.hasNext()) {
       const f = files.next();
-      f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      try { f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch(_) {}
       return "https://drive.google.com/uc?export=view&id=" + f.getId();
     }
     return null;

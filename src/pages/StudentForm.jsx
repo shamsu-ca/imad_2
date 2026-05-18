@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { api } from '../lib/api.js'
-import PhotoUpload from '../components/PhotoUpload.jsx'
 
 const READONLY = ['ad no', 'adno', 'name', 'ad. year', 'year', 'batch']
 const isRO = f => READONLY.some(r =>
@@ -11,11 +10,11 @@ const DH_OPTS = [
   {value:'',label:'Select status…'},
   {value:'PG Completed',     label:'PG Completed'},
   {value:'UG Completed',     label:'UG Completed'},
-  {value:'Not completed UG', label:'Not completed UG'},
+  {value:'Not Completed UG', label:'Not Completed UG'},
 ]
 const DESIGNATIONS = ['Qatheeb','Muallim','Arabic College','Teacher (School)','College Professor','Translator','Typing','Other']
 const EMP_OPTS = [
-  {value:'Self-employed', emoji:'🏢', label:'Self-employed / Entrepreneur'},
+  {value:'Self-employed / Entrepreneur', emoji:'🏢', label:'Self-employed / Entrepreneur'},
   {value:'Employed',      emoji:'💼', label:'Employed'},
   {value:'Higher Studies',emoji:'🎓', label:'Higher Studies'},
 ]
@@ -84,12 +83,13 @@ function StepIndicator({ current, total }) {
 
 export default function StudentForm({ data, onBack }) {
   const { student: initial, headers } = data
-  const [vals,      setVals]    = useState(() => ({...initial}))
-  const [step,      setStep]    = useState(1)
-  const [saving,    setSaving]  = useState(false)
-  const [saveMsg,   setSaveMsg] = useState(null)
-  const [submitted, setSubmitted] = useState(!!initial._submitted)
-  const [done,      setDone]    = useState(false)
+  const [vals,        setVals]      = useState(() => ({...initial}))
+  const [step,        setStep]      = useState(1)
+  const [saving,      setSaving]    = useState(false)
+  const [saveMsg,     setSaveMsg]   = useState(null)
+  const [submitted,   setSubmitted] = useState(!!initial._submitted)
+  const [done,        setDone]      = useState(false)
+  const [sameAsPhone, setSameAsPhone] = useState(false)
 
   const h = (name) => {
     if (!headers) return name
@@ -130,7 +130,7 @@ export default function StudentForm({ data, onBack }) {
     Object.entries(vals).forEach(([k,v]) => { if(!isRO(k) && !k.startsWith('_')) editable[k] = v })
     // Clear employment fields that don't belong to the current status
     const status = vals[h('Current Status')] || ''
-    const keep = status === 'Self-employed' ? SELF_EMP_FIELDS
+    const keep = status === 'Self-employed / Entrepreneur' ? SELF_EMP_FIELDS
       : status === 'Employed' ? EMPLOYED_FIELDS
       : status === 'Higher Studies' ? HIGHER_FIELDS
       : []
@@ -186,14 +186,17 @@ export default function StudentForm({ data, onBack }) {
     return (
       <div className="wrap" style={{paddingTop:48, textAlign:'center'}}>
         <div style={{
-          width:72, height:72, borderRadius:'50%',
+          width:80, height:80, borderRadius:'50%',
           background:'var(--green-bg)', border:'2px solid var(--green-bd)',
           display:'flex', alignItems:'center', justifyContent:'center',
-          margin:'0 auto 20px', fontSize:'2rem',
+          margin:'0 auto 24px', fontSize:'2.4rem',
         }}>✓</div>
-        <h2 style={{fontSize:'1.5rem', marginBottom:8}}>All done!</h2>
-        <p style={{color:'var(--text2)', marginBottom:28, maxWidth:300, margin:'0 auto 28px'}}>
-          Your details have been saved and your record is marked as submitted.
+        <h2 style={{fontSize:'1.6rem', marginBottom:10, fontWeight:700}}>Thank You!</h2>
+        <p style={{color:'var(--text2)', maxWidth:320, margin:'0 auto 8px', lineHeight:1.6}}>
+          Your details have been submitted successfully.
+        </p>
+        <p style={{color:'var(--text3)', maxWidth:300, margin:'0 auto 32px', fontSize:'0.9rem'}}>
+          JazakAllahu Khayran for taking the time to update your information.
         </p>
         <button className="btn btn-outline" onClick={onBack}>← Back to Home</button>
       </div>
@@ -206,11 +209,6 @@ export default function StudentForm({ data, onBack }) {
       {/* Identity strip */}
       <div className="card" style={{marginBottom:20,padding:'16px 20px'}}>
         <div style={{display:'flex',alignItems:'center',gap:16}}>
-          <PhotoUpload
-            adNo={adNo}
-            initialUrl={vals._photoUrl || null}
-            onUploaded={url => set('_photoUrl', url)}
-          />
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontWeight:700,fontSize:'1.1rem',letterSpacing:'-0.02em',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
               {vals[nameField] || 'Alumni'}
@@ -239,11 +237,73 @@ export default function StudentForm({ data, onBack }) {
           </div>
           <div className="card" style={{marginBottom:16}}>
             <div style={{display:'flex',flexDirection:'column',gap:14}}>
-              <TF {...fp} label="Phone Number *" field={phoneField} type="tel" inputMode="tel"
-                hint="Your current active phone number" />
-              <TF {...fp} label="WhatsApp Number *" field={whatsappField} type="tel" inputMode="tel"
-                hint="WhatsApp number (can be same as phone)" />
-              <TF {...fp} label="Email Address" field={emailField} type="email" />
+
+              {/* Phone Number */}
+              <div className="field">
+                <label className="label">Phone Number *</label>
+                <input
+                  className="input"
+                  type="tel" inputMode="tel"
+                  value={vals[phoneField] ?? ''}
+                  onChange={e => {
+                    set(phoneField, e.target.value)
+                    if (sameAsPhone) set(whatsappField, e.target.value)
+                  }}
+                />
+                <span style={{fontSize:'0.72rem',color:'var(--text3)'}}>Your current active phone number</span>
+              </div>
+
+              {/* WhatsApp Number */}
+              <div className="field">
+                <label className="label">WhatsApp Number *</label>
+                <input
+                  className="input"
+                  type="tel" inputMode="tel"
+                  value={vals[whatsappField] ?? ''}
+                  readOnly={sameAsPhone}
+                  onChange={sameAsPhone ? undefined : e => set(whatsappField, e.target.value)}
+                  style={sameAsPhone ? {background:'var(--bg2)',color:'var(--text3)'} : {}}
+                />
+                <label style={{display:'flex',alignItems:'center',gap:6,marginTop:6,cursor:'pointer',fontSize:'0.8rem',color:'var(--text2)',userSelect:'none'}}>
+                  <input
+                    type="checkbox"
+                    checked={sameAsPhone}
+                    onChange={e => {
+                      setSameAsPhone(e.target.checked)
+                      if (e.target.checked) set(whatsappField, vals[phoneField] || '')
+                    }}
+                    style={{width:15,height:15,cursor:'pointer'}}
+                  />
+                  Same as phone number
+                </label>
+              </div>
+
+              {/* Email Address */}
+              <div className="field">
+                <label className="label">Email Address <span style={{fontWeight:400,color:'var(--text3)'}}>(optional)</span></label>
+                <input
+                  className="input"
+                  type="email"
+                  value={vals[emailField] ?? ''}
+                  onChange={e => set(emailField, e.target.value)}
+                  placeholder="e.g. yourname@gmail.com"
+                />
+                <div style={{display:'flex',alignItems:'center',gap:6,marginTop:6,flexWrap:'wrap'}}>
+                  <span style={{fontSize:'0.72rem',color:'var(--text3)'}}>Quick fill:</span>
+                  {['@gmail.com','@icloud.com'].map(domain => (
+                    <button key={domain} type="button"
+                      className="btn btn-ghost btn-sm"
+                      style={{fontSize:'0.72rem',height:26,padding:'0 8px',borderRadius:6}}
+                      onClick={() => {
+                        const cur = vals[emailField] || ''
+                        const local = cur.includes('@') ? cur.split('@')[0] : cur
+                        set(emailField, local + domain)
+                      }}
+                    >{domain}</button>
+                  ))}
+                </div>
+              </div>
+
               <TF {...fp} label="Address" field={addrField} hint="House / Street / Area" />
               <TF {...fp} label="Post Office" field={poField} />
             </div>
@@ -261,7 +321,7 @@ export default function StudentForm({ data, onBack }) {
           <div className="card" style={{marginBottom:16}}>
             <div style={{display:'flex',flexDirection:'column',gap:14}}>
               <SF {...fp} label="DH Status" field={dhField} options={DH_OPTS} />
-              {dhStatus === 'Not completed UG' && (
+              {dhStatus === 'Not Completed UG' && (
                 <div className="field fade">
                   <label className="label">Last Attended Class</label>
                   <select
@@ -308,7 +368,7 @@ export default function StudentForm({ data, onBack }) {
                 </div>
               </div>
 
-              {empSt === 'Self-employed' && (
+              {empSt === 'Self-employed / Entrepreneur' && (
                 <div className="fade" style={{display:'flex',flexDirection:'column',gap:14,borderTop:'1px solid var(--border)',paddingTop:14}}>
                   <TF {...fp} label="Business Name"      field={h('Business Name')} />
                   <TF {...fp} label="Nature of Business" field={h('Nature of Business')} hint="e.g. Retail, Education, IT" />
