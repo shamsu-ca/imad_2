@@ -5,7 +5,6 @@
 
 const SHEET_ID      = "15VGrlmOvBjEYp3I8PxwQ954_Pp6S8d3sJUmgMBROLT4";
 const BASE_TAB      = "base";
-const CODES_TAB     = "codes";
 const ADMIN_KEY     = "DIA_ADMIN_PASS";
 const DRIVE_FOLDER  = "DIA_PHOTOS_FOLDER_ID";
 const SUBMITTED_COL = "Submitted At";
@@ -52,19 +51,12 @@ function route(action, qp, body) {
 }
 
 function getSheet() { return SpreadsheetApp.openById(SHEET_ID).getSheetByName(BASE_TAB); }
-function getCodesSheet() {
-  const ss = SpreadsheetApp.openById(SHEET_ID);
-  let sh = ss.getSheetByName(CODES_TAB);
-  if (!sh) {
-    // case-insensitive fallback (sheet might be named "Codes" or "CODES")
-    const all = ss.getSheets();
-    sh = all.find(s => s.getName().toLowerCase() === CODES_TAB.toLowerCase()) || null;
-  }
-  if (!sh) {
-    sh = ss.insertSheet(CODES_TAB);
-    sh.getRange(1, 1, 1, 2).setValues([['BatchNo', 'Code']]);
-  }
-  return sh;
+// Batch code formula: {batch}26{letter}, cycling a-e.
+// Batches 1-18 use offset 1; batches 19+ reset to offset 19.
+function getBatchCode(n) {
+  var letters = ['a','b','c','d','e'];
+  var idx = n <= 18 ? (n - 1) % 5 : (n - 19) % 5;
+  return String(n) + '26' + letters[idx];
 }
 
 function getAllData() {
@@ -185,20 +177,14 @@ function getBatchSummaries() {
 }
 
 function validateBatch(batch, code) {
-  const csh = getCodesSheet();
-  if (!csh) throw new Error("'codes' sheet not found");
-  const data = csh.getDataRange().getValues();
-  for (let i = 1; i < data.length; i++) {
-    const rowBatch = String(data[i][0]).trim();
-    const rowCode  = String(data[i][1]).trim().toLowerCase();
-    if (rowBatch === String(batch).trim() && rowCode === String(code).trim().toLowerCase()) return true;
-  }
-  return false;
+  var n = parseInt(batch);
+  if (!n || n < 1) return false;
+  return getBatchCode(n) === String(code).trim().toLowerCase();
 }
 
 function testBatch(batch, code) {
-  const result = validateBatch(batch, code);
-  Logger.log("validateBatch(%s, %s) => %s", batch, code, result);
+  var result = validateBatch(batch, code);
+  Logger.log("validateBatch(%s, %s) => %s expected=%s", batch, code, result, getBatchCode(parseInt(batch)));
   return result;
 }
 

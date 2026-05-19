@@ -1,11 +1,8 @@
 import { useState } from 'react'
 import { api } from '../lib/api.js'
+import { validateBatchCode } from '../lib/batchCodes.js'
 
-function getMaxBatch() {
-  return parseInt(localStorage.getItem('imad_max_batch') || '18') || 18
-}
-
-export default function Topbar({ view, onHome, onBatch, onAdmin }) {
+export default function Topbar({ view, onHome, onBatch, onAdmin, maxBatch }) {
   const [modal,   setModal]   = useState(null)
   const [batch,   setBatch]   = useState('')
   const [code,    setCode]    = useState('')
@@ -18,8 +15,10 @@ export default function Topbar({ view, onHome, onBatch, onAdmin }) {
   async function submitBatch(e) {
     e.preventDefault(); setLoading(true); setError('')
     try {
-      const valid = await api.validateBatch(batch, code)
-      if (!valid) { setError('Invalid code. Please check and retry.'); return }
+      if (!validateBatchCode(batch, code)) {
+        setError('Invalid code. Please check and retry.')
+        return
+      }
       const data = await api.getBatchStudents(batch, code)
       close(); onBatch({ batch, code, data })
     } catch(e) { setError(e.message) }
@@ -36,10 +35,8 @@ export default function Topbar({ view, onHome, onBatch, onAdmin }) {
     finally { setLoading(false) }
   }
 
-  // Show batch/admin buttons only on the public landing page and dashboard views
   const showDashboardButtons = view === 'public'
-  const maxBatch = getMaxBatch()
-  const batchOptions = Array.from({ length: maxBatch }, (_, i) => i + 1)
+  const batchOptions = Array.from({ length: maxBatch || 16 }, (_, i) => i + 1)
 
   return (
     <>

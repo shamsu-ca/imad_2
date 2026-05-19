@@ -102,11 +102,7 @@ function BatchMiniCard({ batch, submitted, total }) {
   )
 }
 
-function getMaxBatch() {
-  return parseInt(localStorage.getItem('imad_max_batch') || '18') || 18
-}
-
-export default function PublicPage({ onStudentFound }) {
+export default function PublicPage({ onStudentFound, maxBatch = 16 }) {
   const [summaries, setSummaries]   = useState([])
   const [loadingBatch, setLoadingB] = useState(true)
   const [showCards, setShowCards]   = useState(false)
@@ -123,7 +119,6 @@ export default function PublicPage({ onStudentFound }) {
     setTimeout(() => inputRef.current?.focus(), 300)
   }, [])
 
-  const maxBatch = getMaxBatch()
   const visible = maxBatch > 0
     ? summaries.filter(s => parseInt(s.batch) <= maxBatch)
     : summaries

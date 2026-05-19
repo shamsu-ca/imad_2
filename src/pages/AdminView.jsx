@@ -124,12 +124,11 @@ function EditPopup({ student, headers, onSave, onClose }) {
 }
 
 // ── Batch Visibility Settings ─────────────────────────────────
-function BatchSettings({ batches }) {
+function BatchSettings({ batches, currentMax, onSave }) {
   const maxAvailable = batches.length > 0
     ? Math.max(...batches.map(b => parseInt(b.batch) || 0))
-    : 18
-  const stored = parseInt(localStorage.getItem('imad_max_batch') || '18') || maxAvailable
-  const [val, setVal] = useState(stored)
+    : 16
+  const [val, setVal] = useState(currentMax || 16)
   const [saved, setSaved] = useState(false)
 
   const allStudents   = batches.reduce((a,b) => a + b.total, 0)
@@ -142,7 +141,7 @@ function BatchSettings({ batches }) {
   const submitPct      = rangeStudents ? Math.round(rangeSubmitted / rangeStudents * 100) : 0
 
   function save() {
-    localStorage.setItem('imad_max_batch', String(val))
+    onSave(val)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
@@ -193,13 +192,8 @@ function BatchSettings({ batches }) {
           </div>
         </div>
         <button className="btn btn-primary" onClick={save} style={{width:'100%',height:44}}>
-          {saved ? '✓ Saved' : 'Save Setting'}
+          {saved ? '✓ Saved — applied' : 'Save Setting'}
         </button>
-        {saved && (
-          <p style={{fontSize:'0.78rem',color:'var(--text3)',textAlign:'center',marginTop:8}}>
-            Reload the page to see the change in the public view.
-          </p>
-        )}
       </div>
 
       <div className="sec-head" style={{marginBottom:10}}>
@@ -238,7 +232,7 @@ function BatchSettings({ batches }) {
 }
 
 // ── Main AdminView ────────────────────────────────────────────
-export default function AdminView({ password, onStudentSelect }) {
+export default function AdminView({ password, onStudentSelect, maxBatch, onMaxBatchChange }) {
   const [stats,    setStats]   = useState(null)
   const [allData,  setAllData] = useState(null)
   const [loading,  setLoading] = useState(true)
@@ -599,7 +593,7 @@ export default function AdminView({ password, onStudentSelect }) {
 
       {/* ── SETTINGS TAB ── */}
       {tab === 'settings' && (
-        <BatchSettings batches={stats.batches} />
+        <BatchSettings batches={stats.batches} currentMax={maxBatch} onSave={onMaxBatchChange} />
       )}
 
       {/* Edit popup */}

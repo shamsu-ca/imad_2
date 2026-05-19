@@ -91,56 +91,74 @@ export default function StudentForm({ data, onBack }) {
   const [done,        setDone]      = useState(false)
   const [sameAsPhone, setSameAsPhone] = useState(false)
 
-  const h = (name) => {
-    if (!headers) return name
-    const lower = name.toLowerCase()
-    return headers.find(hh => hh.toLowerCase() === lower || hh.toLowerCase().includes(lower)) || name
+  // Resolve a sheet header by trying multiple aliases — exact match first, then includes
+  const h = (...terms) => {
+    if (!headers) return terms[0]
+    for (const name of terms) {
+      const found = headers.find(hh => hh.toLowerCase() === name.toLowerCase())
+      if (found) return found
+    }
+    for (const name of terms) {
+      const found = headers.find(hh => hh.toLowerCase().includes(name.toLowerCase()))
+      if (found) return found
+    }
+    return terms[0]
   }
 
-  const adField       = headers?.[0] || 'Ad No'
-  const nameField     = h('name')
-  const yearField     = h('year')
-  const batchField    = h('batch')
-  const phoneField    = h('phone')
-  const whatsappField = headers?.find(hh => hh.toLowerCase().replace(/\s/g,'').includes('whatsapp')) || 'Whatsapp Number'
-  const emailField    = h('email')
-  const addrField     = h('address')
-  const poField       = h('post')
-  const dhField       = h('DH Status')
-  const lastField     = h('Last Attended')
-  const qualField     = h('qualification')
+  const adField        = headers?.[0] || 'Ad No'
+  const nameField      = h('name')
+  const yearField      = h('year', 'ad year', 'admission year')
+  const batchField     = h('batch')
+  const phoneField     = h('phone', 'mobile', 'contact')
+  const whatsappField  = headers?.find(hh => hh.toLowerCase().replace(/\s/g,'').includes('whatsapp')) || 'Whatsapp Number'
+  const emailField     = h('email', 'e-mail', 'mail')
+  const addrField      = h('address', 'home address')
+  const poField        = h('post office', 'post', 'postal')
+  const dhField        = h('DH Status', 'DH')
+  const lastField      = h('Last Attended', 'Last Class')
+  const qualField      = h('Educational Qualification', 'qualification', 'degree')
 
-  const adNo    = vals[adField] || ''
+  // Employment field headers — pre-resolved so buildEditable() uses exact column names
+  const statusField    = h('Current Status', 'Employment Status', 'Work Status', 'Status')
+  const designField    = h('Designation')
+  const custDesigField = h('Custom Designation')
+  const orgNameField   = h('Organisation Name', 'Organization Name', 'organisation', 'organization')
+  const workLocField   = h('Work Location', 'workplace', 'work place')
+  const bizNameField   = h('Business Name')
+  const bizNatureField = h('Nature of Business', 'business type')
+  const bizYearField   = h('Year Started', 'start year')
+  const bizLocField    = h('Business Location')
+  const courseField    = h('Course', 'program')
+  const univField      = h('University', 'institution', 'college')
+  const completionField = h('Year of Completion', 'completion year', 'year of passing')
+
+  const adNo     = vals[adField] || ''
   const dhStatus = vals[dhField] || ''
-  const empSt   = vals[h('Current Status')] || ''
-  const desig   = vals[h('Designation')] || ''
+  const empSt    = vals[statusField] || ''
+  const desig    = vals[designField] || ''
 
   const set = (field, val) => setVals(v => ({...v, [field]: val}))
 
-  // Shared props passed to TF / SF so they can read and write vals
   const fp = { vals, set }
 
-  const SELF_EMP_FIELDS  = ['Business Name', 'Nature of Business', 'Year Started', 'Business Location']
-  const EMPLOYED_FIELDS  = ['Designation', 'Custom Designation', 'Organisation Name', 'Work Location']
-  const HIGHER_FIELDS    = ['Course', 'University', 'Year of Completion']
-  const ALL_EMP_FIELDS   = [...SELF_EMP_FIELDS, ...EMPLOYED_FIELDS, ...HIGHER_FIELDS]
+  const SELF_EMP_HEADERS  = [bizNameField, bizNatureField, bizYearField, bizLocField]
+  const EMPLOYED_HEADERS  = [designField, custDesigField, orgNameField, workLocField]
+  const HIGHER_HEADERS    = [courseField, univField, completionField]
+  const ALL_EMP_HEADERS   = [...SELF_EMP_HEADERS, ...EMPLOYED_HEADERS, ...HIGHER_HEADERS]
 
   function buildEditable() {
     const editable = {}
     Object.entries(vals).forEach(([k,v]) => { if(!isRO(k) && !k.startsWith('_')) editable[k] = v })
-    // Clear employment fields that don't belong to the current status
-    const status = vals[h('Current Status')] || ''
-    const keep = status === 'Self-employed / Entrepreneur' ? SELF_EMP_FIELDS
-      : status === 'Employed' ? EMPLOYED_FIELDS
-      : status === 'Higher Studies' ? HIGHER_FIELDS
+    const status = vals[statusField] || ''
+    const keepHeaders = status === 'Self-employed / Entrepreneur' ? SELF_EMP_HEADERS
+      : status === 'Employed' ? EMPLOYED_HEADERS
+      : status === 'Higher Studies' ? HIGHER_HEADERS
       : []
-    ALL_EMP_FIELDS.forEach(f => {
-      const field = h(f)
-      if (!keep.includes(f)) editable[field] = ''
+    ALL_EMP_HEADERS.forEach(field => {
+      if (!keepHeaders.includes(field)) editable[field] = ''
     })
-    // If Employed but Designation !== Other, clear Custom Designation
-    if (status === 'Employed' && vals[h('Designation')] !== 'Other') {
-      editable[h('Custom Designation')] = ''
+    if (status === 'Employed' && vals[designField] !== 'Other') {
+      editable[custDesigField] = ''
     }
     return editable
   }
@@ -373,7 +391,7 @@ export default function StudentForm({ data, onBack }) {
                     <button
                       key={opt.value} type="button"
                       className={`status-pill ${empSt === opt.value ? 'active' : ''}`}
-                      onClick={() => set(h('Current Status'), opt.value)}
+                      onClick={() => set(statusField, opt.value)}
                     >
                       <div style={{fontSize:'1.1rem',marginBottom:2}}>{opt.emoji}</div>
                       <div style={{fontSize:'0.8rem',fontWeight:600}}>{opt.label}</div>
@@ -384,34 +402,34 @@ export default function StudentForm({ data, onBack }) {
 
               {empSt === 'Self-employed / Entrepreneur' && (
                 <div className="fade" style={{display:'flex',flexDirection:'column',gap:14,borderTop:'1px solid var(--border)',paddingTop:14}}>
-                  <TF {...fp} label="Business Name"      field={h('Business Name')} />
-                  <TF {...fp} label="Nature of Business" field={h('Nature of Business')} hint="e.g. Retail, Education, IT" />
+                  <TF {...fp} label="Business Name"      field={bizNameField} />
+                  <TF {...fp} label="Nature of Business" field={bizNatureField} hint="e.g. Retail, Education, IT" />
                   <div className="g2">
-                    <TF {...fp} label="Year Started"      field={h('Year Started')} type="number" inputMode="numeric" hint="e.g. 2018" />
-                    <TF {...fp} label="Business Location" field={h('Business Location')} hint="City" />
+                    <TF {...fp} label="Year Started"      field={bizYearField} type="number" inputMode="numeric" hint="e.g. 2018" />
+                    <TF {...fp} label="Business Location" field={bizLocField} hint="City" />
                   </div>
                 </div>
               )}
 
               {empSt === 'Employed' && (
                 <div className="fade" style={{display:'flex',flexDirection:'column',gap:14,borderTop:'1px solid var(--border)',paddingTop:14}}>
-                  <SF {...fp} label="Designation" field={h('Designation')} options={[
+                  <SF {...fp} label="Designation" field={designField} options={[
                     {value:'', label:'Select designation…'},
                     ...DESIGNATIONS.map(d => ({value:d, label:d}))
                   ]} />
                   {desig === 'Other' && (
-                    <TF {...fp} label="Custom Designation" field={h('Custom Designation')} hint="Enter your designation" />
+                    <TF {...fp} label="Custom Designation" field={custDesigField} hint="Enter your designation" />
                   )}
-                  <TF {...fp} label="Organisation Name" field={h('Organisation Name')} />
-                  <TF {...fp} label="Work Location"     field={h('Work Location')} hint="City / District" />
+                  <TF {...fp} label="Organisation Name" field={orgNameField} />
+                  <TF {...fp} label="Work Location"     field={workLocField} hint="City / District" />
                 </div>
               )}
 
               {empSt === 'Higher Studies' && (
                 <div className="fade" style={{display:'flex',flexDirection:'column',gap:14,borderTop:'1px solid var(--border)',paddingTop:14}}>
-                  <TF {...fp} label="Course"                    field={h('Course')}      hint="e.g. M.A. Arabic, MBA" />
-                  <TF {...fp} label="University / Institution"  field={h('University')} />
-                  <TF {...fp} label="Year of Completion"        field={h('Year of Completion')} type="number" inputMode="numeric" hint="e.g. 2026" />
+                  <TF {...fp} label="Course"                    field={courseField}      hint="e.g. M.A. Arabic, MBA" />
+                  <TF {...fp} label="University / Institution"  field={univField} />
+                  <TF {...fp} label="Year of Completion"        field={completionField} type="number" inputMode="numeric" hint="e.g. 2026" />
                 </div>
               )}
             </div>

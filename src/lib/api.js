@@ -44,7 +44,6 @@ export const api = {
   updateRow:         (adNo, values)      => post({ action:"updateRow", adNo, values }),
   markSubmitted:     (adNo)              => post({ action:"markSubmitted", adNo }),
   getBatchSummaries: ()                  => get("getBatchSummaries"),
-  validateBatch:     (batch, code)       => post({ action:"validateBatch", batch, code }),
   getBatchStudents:  (batch, code)       => post({ action:"getBatchStudents", batch, code }),
   validateAdmin:     (password)          => post({ action:"validateAdmin", password }),
   getAdminStats:     (password)          => post({ action:"getAdminStats", password }),
