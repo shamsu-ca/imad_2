@@ -126,11 +126,29 @@ function updateRow(adNo, values) {
   for (let i = 0; i < rows.length; i++) {
     if (String(rows[i][0]).trim() === String(adNo).trim()) {
       let count = 0;
+      let rowData = [...rows[i]];
+      let newHeaders = [];
       Object.entries(values).forEach(([field, value]) => {
         let col = headers.indexOf(field);
         if (col === -1) col = getColIndex(headers, field);
-        if (col >= 0) { sheet.getRange(i + 2, col + 1).setValue(value); count++; }
+        if (col >= 0) { 
+          rowData[col] = value; 
+          count++; 
+        } else {
+          col = headers.length;
+          headers.push(field);
+          newHeaders.push({ col: col, name: field });
+          rowData[col] = value;
+          count++;
+        }
       });
+      if (count > 0) {
+        newHeaders.forEach(nh => {
+          sheet.getRange(1, nh.col + 1).setValue(nh.name);
+        });
+        while (rowData.length < headers.length) rowData.push("");
+        sheet.getRange(i + 2, 1, 1, headers.length).setValues([rowData]);
+      }
       return { updated: count };
     }
   }

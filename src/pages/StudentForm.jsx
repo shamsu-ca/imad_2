@@ -112,14 +112,14 @@ export default function StudentForm({ data, onBack }) {
   const phoneField     = h('phone', 'mobile', 'contact')
   const whatsappField  = headers?.find(hh => hh.toLowerCase().replace(/\s/g,'').includes('whatsapp')) || 'Whatsapp Number'
   const emailField     = h('email', 'e-mail', 'mail')
-  const addrField      = h('address', 'home address')
+  const addrField      = h('address', 'home address', 'adress')
   const poField        = h('post office', 'post', 'postal')
   const dhField        = h('DH Status', 'DH')
-  const lastField      = h('Last Attended', 'Last Class')
+  const lastField      = h('Last Attended', 'Last Class', 'Completed Class in Irshad')
   const qualField      = h('Educational Qualification', 'qualification', 'degree')
 
   // Employment field headers — pre-resolved so buildEditable() uses exact column names
-  const statusField    = h('Current Status', 'Employment Status', 'Work Status', 'Status')
+  const statusField    = h('Current Status', 'Employment Status', 'Work Status', 'Status', 'Current Occuppation')
   const designField    = h('Designation')
   const custDesigField = h('Custom Designation')
   const orgNameField   = h('Organisation Name', 'Organization Name', 'organisation', 'organization')

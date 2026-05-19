@@ -14,11 +14,13 @@ async function get(action, params = {}) {
   return json.data;
 }
 
-// Encodes POST bodies as a GET ?payload= param — avoids CORS preflight with Apps Script
+// Uses real POST with text/plain (no preflight)
 async function post(body) {
-  const url = new URL(BASE);
-  url.searchParams.set("payload", JSON.stringify(body));
-  const res = await fetch(url.toString());
+  const res = await fetch(BASE, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=UTF-8" },
+    body: JSON.stringify(body),
+  });
   if (!res.ok) throw new Error("Network error: " + res.status);
   const json = await res.json();
   if (!json.ok) throw new Error(json.error || "Request failed");
